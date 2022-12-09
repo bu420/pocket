@@ -3,7 +3,12 @@ software-rasterizer
 https://github.com/bu420/software-rasterizer
 
 Define 'SRZ_IMPLEMENTATION' once.
-Define 'SRZ_SAVE_AND_LOAD' to enable convenience functions for saving to and loading from disk.
+Define 'SRZ_SAVE_AND_LOAD' to enable saving to and loading from disk.
+
+Example:
+#define SRZ_IMPLEMENTATION
+#define SRZ_SAVE_AND_LOAD
+#include "srz.h"
 
 Credits to 'el nora' for sine and cosine implementations.
 */
@@ -111,6 +116,8 @@ srz_matrix_t srz_create_projection_matrix(float aspect, float fov, float near, f
 // @param memory pointer to memory that the user must allocate and free themself.
 void srz_image_init(srz_image_t* image, int w, int h, void* memory);
 srz_byte3_t* srz_image_at(srz_image_t* image, int x, int y);
+// @return NULL if out-of-bounds.
+srz_byte3_t* srz_image_at_check_bounds(srz_image_t* image, int x, int y);
 void srz_image_raster_line(srz_image_t* image, srz_int2_t a, srz_int2_t b, srz_byte3_t color);
 void srz_image_raster_tri(srz_image_t* image, srz_int2_t a, srz_int2_t b, srz_int2_t c, srz_byte3_t color);
 #ifdef SRZ_SAVE_AND_LOAD
@@ -487,6 +494,13 @@ srz_byte3_t* srz_image_at(srz_image_t* image, int x, int y) {
     return &image->pixels[y * image->w + x];
 }
 
+srz_byte3_t* srz_image_at_check_bounds(srz_image_t* image, int x, int y) {
+    if (x < 0 || y < 0 || x >= image->w || y >= image->h) {
+        return NULL;
+    }
+    return srz_image_at(image, x, y);
+}
+
 void srz_image_raster_line(srz_image_t* image, srz_int2_t a, srz_int2_t b, srz_byte3_t color) {
     srz_int2_t diff = {b.x - a.x, b.y - a.y};
     srz_int2_t diff_abs = {srz_absf(diff.x), srz_absf(diff.y)};
@@ -506,7 +520,10 @@ void srz_image_raster_line(srz_image_t* image, srz_int2_t a, srz_int2_t b, srz_b
             e.x = a.x;
         }
 
-        *srz_image_at(image, pos.x, pos.y) = color;
+        srz_byte3_t* pixel = srz_image_at_check_bounds(image, pos.x, pos.y);
+        if (pixel) {
+            *pixel = color;
+        }
 
         for (int i = 0; pos.x < e.x; i++) {
             pos.x++;
@@ -522,7 +539,10 @@ void srz_image_raster_line(srz_image_t* image, srz_int2_t a, srz_int2_t b, srz_b
                 }
                 p.x += 2 * (diff_abs.y - diff_abs.x);
             }
-            *srz_image_at(image, pos.x, pos.y) = color;
+            srz_byte3_t* pixel = srz_image_at_check_bounds(image, pos.x, pos.y);
+            if (pixel) {
+                *pixel = color;
+            }
         }
     }
     else {
@@ -537,7 +557,10 @@ void srz_image_raster_line(srz_image_t* image, srz_int2_t a, srz_int2_t b, srz_b
             e.y = a.y;
         }
 
-        *srz_image_at(image, pos.x, pos.y) = color;
+        srz_byte3_t* pixel = srz_image_at_check_bounds(image, pos.x, pos.y);
+        if (pixel) {
+            *pixel = color;
+        }
 
         for (int i = 0; pos.y < e.y; i++) {
             pos.y++;
@@ -553,7 +576,10 @@ void srz_image_raster_line(srz_image_t* image, srz_int2_t a, srz_int2_t b, srz_b
                 }
                 p.y += 2 * (diff_abs.x - diff_abs.y);
             }
-            *srz_image_at(image, pos.x, pos.y) = color;
+            srz_byte3_t* pixel = srz_image_at_check_bounds(image, pos.x, pos.y);
+            if (pixel) {
+                *pixel = color;
+            }
         }
     }
 }

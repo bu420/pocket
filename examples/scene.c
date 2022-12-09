@@ -88,9 +88,9 @@ int main() {
 
     srz_matrix_t model;
     srz_matrix_init_identity(&model);
-    //model = srz_srz_matrix_translate(model, (srz_float3_t){3, 3, 3});
-    //model = srz_srz_matrix_translate(model, (srz_float3_t){WIDTH / 2, HEIGHT / 2, 0});
-    //model = srz_matrix_rotate(model, (srz_float3_t){0, 0, SRZ_PI / 4});
+    model = srz_matrix_translate(model, (srz_float3_t){3, 0, 0});
+    //model = srz_matrix_translate(model, (srz_float3_t){WIDTH / 2, HEIGHT / 2, 0});
+    model = srz_matrix_rotate(model, (srz_float3_t){0, SRZ_PI / 4, 0});
     //model = srz_matrix_scale(model, (srz_float3_t){2, 2, 2});
 
     srz_matrix_t view = srz_create_view_matrix((srz_float3_t){0, 0, 8}, (srz_float3_t){0, 0, -1}, (srz_float3_t){0, -1, 0});
