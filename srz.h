@@ -8,7 +8,7 @@ Define 'SRZ_SAVE_AND_LOAD' to enable saving to and loading from disk.
 Example:
 #define SRZ_IMPLEMENTATION
 #define SRZ_SAVE_AND_LOAD
-#include "srz.h"
+#include <srz.h>
 
 Credits to 'el nora' for sine and cosine implementations.
 */
@@ -16,6 +16,11 @@ Credits to 'el nora' for sine and cosine implementations.
 #pragma once
 
 #define SRZ_PI 3.1415926f
+#ifdef __cplusplus
+#define SRZ_NULL nullptr
+#else
+#define SRZ_NULL ((void*)0)
+#endif
 
 typedef unsigned char srz_byte_t;
 
@@ -70,7 +75,7 @@ typedef union {
 } srz_float4_t;
 
 typedef struct {
-    float elements[16];
+    float m[4][4];
 } srz_matrix_t;
 
 typedef struct {
@@ -82,6 +87,7 @@ int srz_max(int a, int b);
 int srz_min(int a, int b);
 int srz_max3(int a, int b, int c);
 int srz_min3(int a, int b, int c);
+int srz_abs(int n);
 float srz_maxf(float a, float b);
 float srz_minf(float a, float b);
 float srz_absf(float n);
@@ -99,19 +105,18 @@ float srz_dot(srz_float3_t a, srz_float3_t b);
 
 void srz_matrix_init_zero(srz_matrix_t* matrix);
 void srz_matrix_init_identity(srz_matrix_t* matrix);
-float* srz_matrix_at(srz_matrix_t* matrix, int x, int y);
 srz_matrix_t srz_matrix_mul(srz_matrix_t a, srz_matrix_t b);
 srz_matrix_t srz_matrix_translate(srz_matrix_t matrix, srz_float3_t f);
-// @param f radians.
-srz_matrix_t srz_matrix_rotate(srz_matrix_t matrix, srz_float3_t f);
+srz_matrix_t srz_matrix_rotate_x(srz_matrix_t matrix, float a);
+srz_matrix_t srz_matrix_rotate_y(srz_matrix_t matrix, float a);
+srz_matrix_t srz_matrix_rotate_z(srz_matrix_t matrix, float a);
 srz_matrix_t srz_matrix_scale(srz_matrix_t matrix, srz_float3_t f);
 srz_float3_t srz_matrix_mul_float3(srz_matrix_t matrix, srz_float3_t f);
 srz_float4_t srz_matrix_mul_float4(srz_matrix_t matrix, srz_float4_t f);
 srz_float3_t srz_float3_mul_matrix(srz_float3_t f, srz_matrix_t matrix);
 srz_float4_t srz_float4_mul_matrix(srz_float4_t f, srz_matrix_t matrix);
-srz_matrix_t srz_create_view_matrix(srz_float3_t pos, srz_float3_t dir, srz_float3_t up);
-// @param fov degrees.
-srz_matrix_t srz_create_projection_matrix(float aspect, float fov, float near, float far);
+srz_matrix_t srz_look_at(srz_float3_t pos, srz_float3_t target, srz_float3_t up);
+srz_matrix_t srz_perspective(float aspect, float fov, float near, float far);
 
 // @param memory pointer to memory that the user must allocate and free themself.
 void srz_image_init(srz_image_t* image, int w, int h, void* memory);
@@ -144,6 +149,10 @@ int srz_max3(int a, int b, int c) {
 
 int srz_min3(int a, int b, int c) {
     return srz_min(srz_min(a, b), c);
+}
+
+int srz_abs(int n) {
+    return n >= 0 ? n : -n;
 }
 
 float srz_maxf(float a, float b) {
@@ -266,15 +275,17 @@ float srz_tanf(float n) {
 
 srz_float3_t srz_normalize(srz_float3_t f) {
     float len = srz_sqrtf(f.x * f.x + f.y * f.y + f.z * f.z);
-    return (srz_float3_t){f.x / len, f.y / len, f.z / len};
+    srz_float3_t result = {f.x / len, f.y / len, f.z / len};
+    return result;
 }
 
 srz_float3_t srz_cross(srz_float3_t a, srz_float3_t b) {
-    return (srz_float3_t){
+    srz_float3_t result = {
         a.y * b.z - a.z * b.y,
         a.z * b.x - a.x * b.z,
         a.x * b.y - a.y * b.x
     };
+    return result;
 }
 
 float srz_dot(srz_float3_t a, srz_float3_t b) {
@@ -282,21 +293,18 @@ float srz_dot(srz_float3_t a, srz_float3_t b) {
 }
 
 void srz_matrix_init_zero(srz_matrix_t* matrix) {
-    for (int i = 0; i < 16; ++i) {
-        matrix->elements[i] = 0;
+    for (int x = 0; x < 4; ++x) {
+        for (int y = 0; y < 4; ++y) {
+            matrix->m[x][y] = 0;
+        }
     }
 }
 
 void srz_matrix_init_identity(srz_matrix_t* matrix) {
     srz_matrix_init_zero(matrix);
-
     for (int i = 0; i < 4; ++i) {
-        *srz_matrix_at(matrix, i, i) = 1;
+        matrix->m[i][i] = 1;
     }
-}
-
-float* srz_matrix_at(srz_matrix_t* matrix, int x, int y) {
-    return &matrix->elements[y * 4 + x];
 }
 
 srz_matrix_t srz_matrix_mul(srz_matrix_t a, srz_matrix_t b) {
@@ -306,11 +314,10 @@ srz_matrix_t srz_matrix_mul(srz_matrix_t a, srz_matrix_t b) {
     for (int x = 0; x < 4; ++x) {
         for (int y = 0; y < 4; ++y) {
             for (int i = 0; i < 4; ++i) {
-                *srz_matrix_at(&result, x, y) += *srz_matrix_at(&a, x, i) * *srz_matrix_at(&b, i, y);
+                result.m[x][y] += a.m[x][i] * b.m[i][y];
             }
         }
     }
-
     return result;
 }
 
@@ -318,90 +325,87 @@ srz_matrix_t srz_matrix_translate(srz_matrix_t matrix, srz_float3_t f) {
     srz_matrix_t m;
     srz_matrix_init_identity(&m);
 
-    *srz_matrix_at(&m, 0, 3) = f.x;
-    *srz_matrix_at(&m, 1, 3) = f.y;
-    *srz_matrix_at(&m, 2, 3) = f.z;
+    m.m[3][0] = f.x;
+    m.m[3][1] = f.y;
+    m.m[3][2] = f.z;
 
     return srz_matrix_mul(matrix, m);
 }
 
-srz_matrix_t srz_matrix_rotate(srz_matrix_t matrix, srz_float3_t f) {
-    if (f.x != 0) {
-        float s = srz_sinf(f.x);
-        float c = srz_cosf(f.x);
+srz_matrix_t srz_matrix_rotate_x(srz_matrix_t matrix, float a) {
+    float s = srz_sinf(a);
+    float c = srz_cosf(a);
 
-        srz_matrix_t x;
-        srz_matrix_init_identity(&x);
+    srz_matrix_t x;
+    srz_matrix_init_identity(&x);
 
-        *srz_matrix_at(&x, 1, 1) = c;
-        *srz_matrix_at(&x, 1, 2) = -s;
-        *srz_matrix_at(&x, 2, 1) = s;
-        *srz_matrix_at(&x, 2, 2) = c;
+    x.m[1][1] = c;
+    x.m[1][2] = -s;
+    x.m[2][1] = s;
+    x.m[2][2] = c;
 
-        matrix = srz_matrix_mul(matrix, x);
-    }
+    return srz_matrix_mul(matrix, x);
+}
 
-    if (f.y != 0) {
-        float s = srz_sinf(f.y);
-        float c = srz_cosf(f.y);
+srz_matrix_t srz_matrix_rotate_y(srz_matrix_t matrix, float a) {
+    float s = srz_sinf(a);
+    float c = srz_cosf(a);
 
-        srz_matrix_t y;
-        srz_matrix_init_identity(&y);
+    srz_matrix_t y;
+    srz_matrix_init_identity(&y);
 
-        *srz_matrix_at(&y, 0, 0) = c;
-        *srz_matrix_at(&y, 0, 2) = s;
-        *srz_matrix_at(&y, 2, 0) = -s;
-        *srz_matrix_at(&y, 2, 2) = c;
+    y.m[0][0] = c;
+    y.m[0][2] = s;
+    y.m[2][0] = -s;
+    y.m[2][2] = c;
 
-        matrix = srz_matrix_mul(matrix, y);
-    }
+    return srz_matrix_mul(matrix, y);
+}
 
-    if (f.z != 0) {
-        float s = srz_sinf(f.z);
-        float c = srz_cosf(f.z);
+srz_matrix_t srz_matrix_rotate_z(srz_matrix_t matrix, float a) {
+    float s = srz_sinf(a);
+    float c = srz_cosf(a);
 
-        srz_matrix_t z;
-        srz_matrix_init_identity(&z);
+    srz_matrix_t z;
+    srz_matrix_init_identity(&z);
 
-        *srz_matrix_at(&z, 0, 0) = c;
-        *srz_matrix_at(&z, 0, 1) = -s;
-        *srz_matrix_at(&z, 1, 0) = s;
-        *srz_matrix_at(&z, 1, 1) = c;
+    z.m[0][0] = c;
+    z.m[0][1] = -s;
+    z.m[1][0] = s;
+    z.m[1][1] = c;
 
-        matrix = srz_matrix_mul(matrix, z);
-    }
-
-    return matrix;
+    return srz_matrix_mul(matrix, z);
 }
 
 srz_matrix_t srz_matrix_scale(srz_matrix_t matrix, srz_float3_t f) {
     srz_matrix_t m;
     srz_matrix_init_identity(&m);
 
-    *srz_matrix_at(&m, 0, 0) = f.x;
-    *srz_matrix_at(&m, 1, 1) = f.y;
-    *srz_matrix_at(&m, 2, 2) = f.z;
+    m.m[0][0] = f.x;
+    m.m[1][1] = f.y;
+    m.m[2][2] = f.z;
 
     return srz_matrix_mul(matrix, m);
 }
 
 srz_float3_t srz_matrix_mul_float3(srz_matrix_t matrix, srz_float3_t f) {
-    srz_float4_t result;
+    srz_float4_t f4;
     for (int x = 0; x < 4; ++x) {
         float i = 0;
         for (int y = 0; y < 3; ++y) {
-            i += *srz_matrix_at(&matrix, x, y) * f.values[y];
+            i += matrix.m[x][y] * f.values[y];
         }
-        result.values[x] = i + *srz_matrix_at(&matrix, x, 3);
+        f4.values[x] = i + matrix.m[x][3];
     }
     
-    if (result.w != 0) {
-        result.x /= result.w;
-        result.y /= result.w;
-        result.z /= result.w;
+    if (f4.w != 0) {
+        f4.x /= f4.w;
+        f4.y /= f4.w;
+        f4.z /= f4.w;
     }
 
-    return (srz_float3_t){result.x, result.y, result.z};
+    srz_float3_t result = {f4.x, f4.y, f4.z};
+    return result;
 }
 
 srz_float4_t srz_matrix_mul_float4(srz_matrix_t matrix, srz_float4_t f) {
@@ -409,7 +413,7 @@ srz_float4_t srz_matrix_mul_float4(srz_matrix_t matrix, srz_float4_t f) {
     for (int x = 0; x < 4; ++x) {
         float i = 0;
         for (int y = 0; y < 4; ++y) {
-            i += *srz_matrix_at(&matrix, x, y) * f.values[y];
+            i += matrix.m[x][y] * f.values[y];
         }
         result.values[x] = i;
     }
@@ -417,22 +421,23 @@ srz_float4_t srz_matrix_mul_float4(srz_matrix_t matrix, srz_float4_t f) {
 }
 
 srz_float3_t srz_float3_mul_matrix(srz_float3_t f, srz_matrix_t matrix) {
-    srz_float4_t result;
+    srz_float4_t f4;
     for (int y = 0; y < 4; ++y) {
         float i = 0;
         for (int x = 0; x < 3; ++x) {
-            i += *srz_matrix_at(&matrix, x, y) * f.values[x];
+            i += matrix.m[x][y] * f.values[x];
         }
-        result.values[y] = i + *srz_matrix_at(&matrix, 3, y);
+        f4.values[y] = i + matrix.m[3][y];
     }
     
-    if (result.w != 0) {
-        result.x /= result.w;
-        result.y /= result.w;
-        result.z /= result.w;
+    if (f4.w != 0) {
+        f4.x /= f4.w;
+        f4.y /= f4.w;
+        f4.z /= f4.w;
     }
 
-    return (srz_float3_t){result.x, result.y, result.z};
+    srz_float3_t result = {f4.x, f4.y, f4.z};
+    return result;
 }
 
 srz_float4_t srz_float4_mul_matrix(srz_float4_t f, srz_matrix_t matrix) {
@@ -440,54 +445,54 @@ srz_float4_t srz_float4_mul_matrix(srz_float4_t f, srz_matrix_t matrix) {
     for (int y = 0; y < 4; ++y) {
         float i = 0;
         for (int x = 0; x < 4; ++x) {
-            i += *srz_matrix_at(&matrix, x, y) * f.values[x];
+            i += matrix.m[x][y] * f.values[x];
         }
         result.values[y] = i;
     }
     return result;
 }
 
-srz_matrix_t srz_create_view_matrix(srz_float3_t pos, srz_float3_t dir, srz_float3_t up) {
-    dir = srz_normalize(dir);
-    srz_float3_t right = srz_normalize(srz_cross(up, dir));
-    srz_float3_t local_up = srz_normalize(srz_cross(dir, right));
+srz_matrix_t srz_look_at(srz_float3_t pos, srz_float3_t target, srz_float3_t up) {
+    srz_float3_t diff = {target.x - pos.x, target.y - pos.y, target.z - pos.z};
+    srz_float3_t forward = srz_normalize(diff);
+    srz_float3_t right = srz_normalize(srz_cross(forward, up));
+    srz_float3_t local_up = srz_normalize(srz_cross(right, forward));
 
     srz_matrix_t m;
     srz_matrix_init_identity(&m);
-
-    *srz_matrix_at(&m, 0, 0) = right.x;
-    *srz_matrix_at(&m, 0, 1) = right.y;
-    *srz_matrix_at(&m, 0, 2) = right.z;
-    *srz_matrix_at(&m, 1, 0) = local_up.x;
-    *srz_matrix_at(&m, 1, 1) = local_up.y;
-    *srz_matrix_at(&m, 1, 2) = local_up.z;
-    *srz_matrix_at(&m, 2, 0) = dir.x;
-    *srz_matrix_at(&m, 2, 1) = dir.y;
-    *srz_matrix_at(&m, 2, 2) = dir.z;
-    *srz_matrix_at(&m, 0, 3) = -srz_dot(right, pos);
-    *srz_matrix_at(&m, 1, 3) = -srz_dot(local_up, pos);
-    *srz_matrix_at(&m, 2, 3) = -srz_dot(dir, pos);
+    m.m[0][0] = right.x;
+    m.m[1][0] = right.y;
+    m.m[2][0] = right.z;
+    m.m[0][1] = local_up.x;
+    m.m[1][1] = local_up.y;
+    m.m[2][1] = local_up.z;
+    m.m[0][2] = -forward.x;
+    m.m[1][2] = -forward.y;
+    m.m[2][2] = -forward.z;
+    m.m[3][0] = -srz_dot(right, pos);
+    m.m[3][1] = -srz_dot(local_up, pos);
+    m.m[3][2] = srz_dot(forward, pos);
     return m;
 }
 
-srz_matrix_t srz_create_projection_matrix(float aspect, float fov, float near, float far) {
+srz_matrix_t srz_perspective(float aspect, float fov, float near, float far) {    
     srz_matrix_t m;
     srz_matrix_init_zero(&m);
 
-    float scale = 1.f / srz_tanf(fov * .5f / 180.f * SRZ_PI);
-    *srz_matrix_at(&m, 0, 0) = scale * aspect;
-    *srz_matrix_at(&m, 1, 1) = scale;
-    *srz_matrix_at(&m, 2, 2) = far / (far - near);
-    *srz_matrix_at(&m, 3, 2) = (-far * near) / (far - near);
-    *srz_matrix_at(&m, 2, 3) = 1;
-    *srz_matrix_at(&m, 3, 3) = 0;
+    float half_tan = srz_tanf(fov / 2);
+
+    m.m[0][0] = 1 / (half_tan * aspect);
+    m.m[1][1] = 1 / half_tan;
+    m.m[2][2] = -(far + near) / (far - near);
+    m.m[2][3] = -1;
+    m.m[3][2] = -(2 * far * near) / (far - near);
     return m;
 }
 
 void srz_image_init(srz_image_t* image, int w, int h, void* memory) {
     image->w = w;
     image->h = h;
-    image->pixels = memory;
+    image->pixels = (srz_byte3_t*)memory;
 }
 
 srz_byte3_t* srz_image_at(srz_image_t* image, int x, int y) {
@@ -496,14 +501,14 @@ srz_byte3_t* srz_image_at(srz_image_t* image, int x, int y) {
 
 srz_byte3_t* srz_image_at_check_bounds(srz_image_t* image, int x, int y) {
     if (x < 0 || y < 0 || x >= image->w || y >= image->h) {
-        return NULL;
+        return SRZ_NULL;
     }
     return srz_image_at(image, x, y);
 }
 
 void srz_image_raster_line(srz_image_t* image, srz_int2_t a, srz_int2_t b, srz_byte3_t color) {
     srz_int2_t diff = {b.x - a.x, b.y - a.y};
-    srz_int2_t diff_abs = {srz_absf(diff.x), srz_absf(diff.y)};
+    srz_int2_t diff_abs = {srz_abs(diff.x), srz_abs(diff.y)};
     srz_int2_t p = {2 * diff_abs.y - diff_abs.x, 2 * diff_abs.x - diff_abs.y};
     srz_int2_t pos;
     srz_int2_t e;
@@ -618,19 +623,19 @@ void srz_image_raster_tri(srz_image_t* image, srz_int2_t a, srz_int2_t b, srz_in
 
 #ifdef SRZ_SAVE_AND_LOAD
 void srz_image_save_bmp(char const* filename, srz_image_t image) {
-    srz_byte_t const padding[] = {0, 0, 0};
-    int const padding_size = (4 - image.w * 3 % 4) % 4;
-    int const stride = image.w * 3 + padding_size;
-    int const file_size = 54 + stride * image.h;
+    srz_byte_t padding[] = {0, 0, 0};
+    int padding_size = (4 - image.w * 3 % 4) % 4;
+    int stride = image.w * 3 + padding_size;
+    int file_size = 54 + stride * image.h;
 
-    srz_byte_t const header[54] = {
+    srz_byte_t header[54] = {
         'B', 'M',
-        file_size, file_size >> 8, file_size >> 16, file_size >> 24,
+        (srz_byte_t)file_size, (srz_byte_t)(file_size >> 8), (srz_byte_t)(file_size >> 16), (srz_byte_t)(file_size >> 24),
         0, 0, 0, 0,
         54, 0, 0, 0,
         40, 0, 0, 0,
-        image.w, image.w >> 8, image.w >> 16, image.w >> 24,
-        image.h, image.h >> 8, image.h >> 16, image.h >> 24,
+        (srz_byte_t)image.w, (srz_byte_t)(image.w >> 8), (srz_byte_t)(image.w >> 16), (srz_byte_t)(image.w >> 24),
+        (srz_byte_t)image.h, (srz_byte_t)(image.h >> 8), (srz_byte_t)(image.h >> 16), (srz_byte_t)(image.h >> 24),
         1, 0,
         3 * 8, 0,
         0, 0, 0, 0,
