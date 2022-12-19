@@ -24,59 +24,33 @@ int main() {
         }
     }
 
-    // Position and color.
-    float cube_vertices[36 * 6] = {
-        -0.5, -0.5, -0.5, 255, 0, 0,
-        0.5, -0.5, -0.5, 255, 0, 0,
-        0.5, 0.5, -0.5, 255, 0, 0,
-        0.5, 0.5, -0.5, 255, 0, 0,
-        -0.5, 0.5, -0.5, 255, 0, 0,
-        -0.5, -0.5, -0.5, 255, 0, 0,
+    srz_byte_t cube[36 * 3] = {
+        0,0,0,0,1,0,1,1,0,0,0,0,1,1,0,1,0,0,
+        1,0,0,1,1,0,1,1,1,1,0,0,1,1,1,1,0,1,
+        1,0,1,1,1,1,0,1,1,1,0,1,0,1,1,0,0,1,
+        0,0,1,0,1,1,0,1,0,0,0,1,0,1,0,0,0,0,
+        0,1,0,0,1,1,1,1,1,0,1,0,1,1,1,1,1,0,
+        1,0,1,0,0,1,0,0,0,1,0,1,0,0,0,1,0,0
+    };
 
-        -0.5, -0.5, 0.5, 0, 255, 0,
-        0.5, -0.5, 0.5, 0, 255, 0,
-        0.5, 0.5, 0.5, 0, 255, 0,
-        0.5, 0.5, 0.5, 0, 255, 0,
-        -0.5, 0.5, 0.5, 0, 255, 0,
-        -0.5, -0.5, 0.5, 0, 255, 0,
-
-        -0.5, 0.5, 0.5, 0, 0, 255,
-        -0.5, 0.5, -0.5, 0, 0, 255,
-        -0.5, -0.5, -0.5, 0, 0, 255,
-        -0.5, -0.5, -0.5, 0, 0, 255,
-        -0.5, -0.5, 0.5, 0, 0, 255,
-        -0.5, 0.5, 0.5, 0, 0, 255,
-
-        0.5, 0.5, 0.5, 255, 0, 255,
-        0.5, 0.5, -0.5, 255, 0, 255,
-        0.5, -0.5, -0.5, 255, 0, 255,
-        0.5, -0.5, -0.5, 255, 0, 255,
-        0.5, -0.5, 0.5, 255, 0, 255,
-        0.5, 0.5, 0.5, 255, 0, 255,
-
-        -0.5, -0.5, -0.5, 255, 255, 0,
-        0.5, -0.5, -0.5, 255, 255, 0,
-        0.5, -0.5, 0.5, 255, 255, 0,
-        0.5, -0.5, 0.5, 255, 255, 0,
-        -0.5, -0.5, 0.5, 255, 255, 0,
-        -0.5, -0.5, -0.5, 255, 255, 0,
-
-        -0.5, 0.5, -0.5, 255, 255, 255,
-        0.5, 0.5, -0.5, 255, 255, 255,
-        0.5, 0.5, 0.5, 255, 255, 255,
-        0.5, 0.5, 0.5, 255, 255, 255,
-        -0.5, 0.5, 0.5, 255, 255, 255,
-        -0.5, 0.5, -0.5, 255, 255, 255
+    char normals[6 * 3] = {
+        0, 0, 1,
+        -1, 0, 0,
+        0, 0, -1,
+        1, 0, 0,
+        0, -1, 0,
+        0, 1, 0
     };
 
     srz_float3_t cube_positions[4] = {
         {0, 0, 0},
-        {1, 0.25, -0.125},
-        {2, 0.5, -0.25},
-        {3, 0.75, -0.375}
+        {1.5, 0.25, 0},
+        {3, 0.5, 0},
+        {4.5, 0.75, 0}
     };
 
-    srz_matrix_t view = srz_look_at((srz_float3_t){4, 0, 8}, (srz_float3_t){2, 1, 0}, (srz_float3_t){0, 1, 0});
+    srz_float3_t camera_pos = {0, -2, -8};
+    srz_matrix_t view = srz_look_at(camera_pos, (srz_float3_t){3, 1, 0}, (srz_float3_t){0, -1, 0});
     srz_matrix_t projection = srz_perspective(HEIGHT / (float)WIDTH, 50.f * (SRZ_PI / 180), 0.1f, 1000.f);
 
     for (int i = 0; i < 4; ++i) {
@@ -86,43 +60,56 @@ int main() {
 
         srz_matrix_t mvp = srz_matrix_mul(srz_matrix_mul(model, view), projection);
 
-        float vertices_copy[36 * 6];
-        memcpy(vertices_copy, cube_vertices, sizeof(float) * 36 * 6);
+        float vertices[36 * 3];
 
-        // Multiply cube with matrix.
+        // Vertex multiplication and scale to viewport.
         for (int i = 0; i < 36; ++i) {
-            int j = i * 6;
-            srz_float3_t pos = {vertices_copy[j + 0], vertices_copy[j + 1], vertices_copy[j + 2]};
-            srz_float3_t result = srz_float3_mul_matrix(pos, mvp);
+            int j = i * 3;
+
+            float x = cube[j + 0];
+            float y = cube[j + 1];
+            float z = cube[j + 2];
+
+            srz_float3_t vertex = {x, y, z};
+            vertex = srz_float3_mul_matrix(vertex, mvp);
 
             for (int k = 0; k < 3; ++k) {
-                vertices_copy[j + k] = result.values[k];
+                vertices[j + k] = vertex.values[k];
             }
 
-            // Scale from [-1, 1] to image size.
-            vertices_copy[j + 0] = (vertices_copy[j + 0] + 1) / 2.f * WIDTH;
-            vertices_copy[j + 1] = (vertices_copy[j + 1] + 1) / 2.f * HEIGHT;
+            // Scale from [-1, 1] to viewport size.
+            vertices[j + 0] = (vertices[j + 0] + 1) / 2.f * WIDTH;
+            vertices[j + 1] = (vertices[j + 1] + 1) / 2.f * HEIGHT;
         }
 
-        // Render cube.
+        // Render triangles.
         for (int i = 0; i < 12; ++i) {
-            int j = i * 18;
+            int j = i * 9;
 
-            //if (vertices_copy[j + 2] )
+            srz_float3_t v0 = {vertices[j], vertices[j + 1], vertices[j + 2]};
+            srz_float3_t v1 = {vertices[j + 3], vertices[j + 3 + 1], vertices[j + 3 + 2]};
+            srz_float3_t v2 = {vertices[j + 6], vertices[j + 6 + 1], vertices[j + 6 + 2]};
+
+            int normal_i = srz_floorf(i / 2.f) * 3;
+            srz_float3_t normal = {normals[normal_i], normals[normal_i + 1], normals[normal_i + 2]};
+
+            // Discard invisible triangles.
+            if (normal.x * (v0.x - camera_pos.x) + normal.y * (v0.y - camera_pos.y) + normal.z * (v0.z - camera_pos.z) < 0) {
+                continue;
+            }
+
+            srz_float3_t light_dir = srz_normalize((srz_float3_t){0, 1, .5});
+            float light = srz_dot(normal, light_dir);
+            srz_byte3_t color = {255 * light, 255 * light, 255 * light};
             
-            srz_int2_t p0 = {srz_roundf(vertices_copy[j]), srz_roundf(vertices_copy[j + 1])};
-            srz_int2_t p1 = {srz_roundf(vertices_copy[j + 6]), srz_roundf(vertices_copy[j + 6 + 1])};
-            srz_int2_t p2 = {srz_roundf(vertices_copy[j + 12]), srz_roundf(vertices_copy[j + 12 + 1])};
+            srz_int2_t p0 = {srz_roundf(v0.x), srz_roundf(v0.y)};
+            srz_int2_t p1 = {srz_roundf(v1.x), srz_roundf(v1.y)};
+            srz_int2_t p2 = {srz_roundf(v2.x), srz_roundf(v2.y)};
 
-            // Discard triangles behind view.
-            //if ()
-
-            srz_byte3_t color = {vertices_copy[j + 3], vertices_copy[j + 4], vertices_copy[j + 5]};
-
-            //srz_image_raster_tri(&image, p0, p1, p2, color);
-            srz_image_raster_line(&image, p0, p1, color);
+            srz_image_raster_tri(&image, p0, p1, p2, color);
+            /*srz_image_raster_line(&image, p0, p1, color);
             srz_image_raster_line(&image, p1, p2, color);
-            srz_image_raster_line(&image, p2, p0, color);
+            srz_image_raster_line(&image, p2, p0, color);*/
         }
     }
 
