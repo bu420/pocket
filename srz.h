@@ -36,6 +36,16 @@ typedef union {
 
 typedef union {
     struct {
+        srz_byte_t x, y, z, w;
+    };
+    struct {
+        srz_byte_t r, g, b, a;
+    };
+    srz_byte_t values[4];
+} srz_byte4_t;
+
+typedef union {
+    struct {
         int x, y;
     };
     struct {
@@ -80,8 +90,39 @@ typedef struct {
 
 typedef struct {
     int w, h;
-    srz_byte3_t* pixels;
-} srz_image_t;
+    srz_byte3_t* data;
+} srz_color_buffer_t;
+
+typedef struct {
+    int w, h;
+    float* data;
+} srz_depth_buffer_t;
+
+typedef struct {
+    int w, h;
+    srz_byte4_t* data;
+} srz_texture_t;
+
+#ifdef SRZ_SAVE_AND_LOAD
+// Vertex, texture coordinate and normal indices.
+typedef struct {
+    int position_indices[3];
+    // -1 means there is no texture coordinate associated.
+    int tex_coord_indices[3];
+    int normal_indices[3];
+} srz_face_t;
+
+typedef struct {
+    srz_float3_t* positions;
+    srz_float2_t* tex_coords;
+    srz_float3_t* normals;
+    srz_face_t* faces;
+    int position_count;
+    int tex_coord_count;
+    int normal_count;
+    int face_count;
+} srz_mesh_t;
+#endif
 
 int srz_max(int a, int b);
 int srz_min(int a, int b);
@@ -118,21 +159,28 @@ srz_float4_t srz_float4_mul_matrix(srz_float4_t f, srz_matrix_t matrix);
 srz_matrix_t srz_look_at(srz_float3_t pos, srz_float3_t target, srz_float3_t up);
 srz_matrix_t srz_perspective(float aspect, float fov, float near, float far);
 
-// @param memory pointer to memory that the user must allocate and free themself.
-void srz_image_init(srz_image_t* image, int w, int h, void* memory);
-srz_byte3_t* srz_image_at(srz_image_t* image, int x, int y);
-// @return NULL if out-of-bounds.
-srz_byte3_t* srz_image_at_check_bounds(srz_image_t* image, int x, int y);
-void srz_image_raster_line(srz_image_t* image, srz_int2_t a, srz_int2_t b, srz_byte3_t color);
-void srz_image_raster_tri(srz_image_t* image, srz_int2_t a, srz_int2_t b, srz_int2_t c, srz_byte3_t color);
+srz_byte3_t* srz_color_buffer_at(srz_color_buffer_t* color_buffer, int x, int y);
+void srz_color_buffer_clear(srz_color_buffer_t* color_buffer, srz_byte3_t color);
+float* srz_depth_buffer_at(srz_depth_buffer_t* depth_buffer, int x, int y);
+void srz_depth_buffer_clear(srz_depth_buffer_t* depth_buffer);
+srz_byte4_t* srz_texture_at(srz_texture_t* texture, int x, int y);
+// @param depth_buffer pass NULL if depth buffering should not be used.
+void srz_raster_line(srz_color_buffer_t* color_buffer, srz_depth_buffer_t* depth_buffer, srz_int2_t a, srz_int2_t b, srz_byte3_t color);
+// @param depth_buffer pass NULL if depth buffering should not be used.
+void srz_raster_triangle(srz_color_buffer_t* color_buffer, srz_depth_buffer_t* depth_buffer, srz_int2_t a, srz_int2_t b, srz_int2_t c, srz_byte3_t color);
 #ifdef SRZ_SAVE_AND_LOAD
-void srz_image_save_bmp(char const* filename, srz_image_t image);
+void srz_save_bmp(char const* filename, srz_color_buffer_t color_buffer);
+// Simple OBJ loader that WILL break on anything complex format-wise.
+// @return 0 on failure to open file and -1 on bad model.
+int srz_load_obj(char const* filename, srz_mesh_t* mesh);
+void srz_mesh_free(srz_mesh_t* mesh);
 #endif
 
 #ifdef SRZ_IMPLEMENTATION
-
 #ifdef SRZ_SAVE_AND_LOAD
+#include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #endif
 
 int srz_max(int a, int b) {
@@ -489,24 +537,35 @@ srz_matrix_t srz_perspective(float aspect, float fov, float near, float far) {
     return m;
 }
 
-void srz_image_init(srz_image_t* image, int w, int h, void* memory) {
-    image->w = w;
-    image->h = h;
-    image->pixels = (srz_byte3_t*)memory;
+srz_byte3_t* srz_color_buffer_at(srz_color_buffer_t* color_buffer, int x, int y) {
+    return &color_buffer->data[y * color_buffer->w + x];
 }
 
-srz_byte3_t* srz_image_at(srz_image_t* image, int x, int y) {
-    return &image->pixels[y * image->w + x];
-}
-
-srz_byte3_t* srz_image_at_check_bounds(srz_image_t* image, int x, int y) {
-    if (x < 0 || y < 0 || x >= image->w || y >= image->h) {
-        return SRZ_NULL;
+void srz_color_buffer_clear(srz_color_buffer_t* color_buffer, srz_byte3_t color) {
+    for (int i = 0; i < color_buffer->w * color_buffer->h; ++i) {
+        color_buffer->data[i] = color;
     }
-    return srz_image_at(image, x, y);
 }
 
-void srz_image_raster_line(srz_image_t* image, srz_int2_t a, srz_int2_t b, srz_byte3_t color) {
+float* srz_depth_buffer_at(srz_depth_buffer_t* depth_buffer, int x, int y) {
+    return &depth_buffer->data[y * depth_buffer->w + x];
+}
+
+void srz_depth_buffer_clear(srz_depth_buffer_t* depth_buffer) {
+    for (int i = 0; i < depth_buffer->w * depth_buffer->h; ++i) {
+        depth_buffer->data[i] = 0;
+    }
+}
+
+srz_byte4_t* srz_texture_at(srz_texture_t* texture, int x, int y) {
+    return &texture->data[y * texture->w + x];
+}
+
+void srz_raster_line(srz_color_buffer_t* color_buffer, srz_depth_buffer_t* depth_buffer, srz_int2_t a, srz_int2_t b, srz_byte3_t color) {
+    if (!depth_buffer) {
+        // No depth buffer used.
+    }
+    
     srz_int2_t diff = {b.x - a.x, b.y - a.y};
     srz_int2_t diff_abs = {srz_abs(diff.x), srz_abs(diff.y)};
     srz_int2_t p = {2 * diff_abs.y - diff_abs.x, 2 * diff_abs.x - diff_abs.y};
@@ -525,9 +584,9 @@ void srz_image_raster_line(srz_image_t* image, srz_int2_t a, srz_int2_t b, srz_b
             e.x = a.x;
         }
 
-        srz_byte3_t* pixel = srz_image_at_check_bounds(image, pos.x, pos.y);
-        if (pixel) {
-            *pixel = color;
+        int idx = pos.y * color_buffer->w + pos.x;
+        if (idx >= 0 && idx < color_buffer->w * color_buffer->h) {
+            *srz_color_buffer_at(color_buffer, pos.x, pos.y) = color;
         }
 
         for (int i = 0; pos.x < e.x; i++) {
@@ -544,9 +603,10 @@ void srz_image_raster_line(srz_image_t* image, srz_int2_t a, srz_int2_t b, srz_b
                 }
                 p.x += 2 * (diff_abs.y - diff_abs.x);
             }
-            srz_byte3_t* pixel = srz_image_at_check_bounds(image, pos.x, pos.y);
-            if (pixel) {
-                *pixel = color;
+
+            int idx = pos.y * color_buffer->w + pos.x;
+            if (idx >= 0 && idx < color_buffer->w * color_buffer->h) {
+                *srz_color_buffer_at(color_buffer, pos.x, pos.y) = color;
             }
         }
     }
@@ -562,9 +622,9 @@ void srz_image_raster_line(srz_image_t* image, srz_int2_t a, srz_int2_t b, srz_b
             e.y = a.y;
         }
 
-        srz_byte3_t* pixel = srz_image_at_check_bounds(image, pos.x, pos.y);
-        if (pixel) {
-            *pixel = color;
+        int idx = pos.y * color_buffer->w + pos.x;
+        if (idx >= 0 && idx < color_buffer->w * color_buffer->h) {
+            *srz_color_buffer_at(color_buffer, pos.x, pos.y) = color;
         }
 
         for (int i = 0; pos.y < e.y; i++) {
@@ -581,9 +641,10 @@ void srz_image_raster_line(srz_image_t* image, srz_int2_t a, srz_int2_t b, srz_b
                 }
                 p.y += 2 * (diff_abs.x - diff_abs.y);
             }
-            srz_byte3_t* pixel = srz_image_at_check_bounds(image, pos.x, pos.y);
-            if (pixel) {
-                *pixel = color;
+
+            int idx = pos.y * color_buffer->w + pos.x;
+            if (idx >= 0 && idx < color_buffer->w * color_buffer->h) {
+                *srz_color_buffer_at(color_buffer, pos.x, pos.y) = color;
             }
         }
     }
@@ -593,7 +654,11 @@ int _srz_t(srz_int2_t a, srz_int2_t b, srz_int2_t c) {
     return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
 }
 
-void srz_image_raster_tri(srz_image_t* image, srz_int2_t a, srz_int2_t b, srz_int2_t c, srz_byte3_t color) {
+void srz_raster_triangle(srz_color_buffer_t* color_buffer, srz_depth_buffer_t* depth_buffer, srz_int2_t a, srz_int2_t b, srz_int2_t c, srz_byte3_t color) {
+    if (!depth_buffer) {
+        // No depth buffer used.
+    }
+    
     // Bounding box.
     int min_x = srz_min3(a.x, b.x, c.x);
     int min_y = srz_min3(a.y, b.y, c.y);
@@ -603,8 +668,8 @@ void srz_image_raster_tri(srz_image_t* image, srz_int2_t a, srz_int2_t b, srz_in
     // Clip.
     min_x = srz_max(min_x, 0);
     min_y = srz_max(min_y, 0);
-    max_x = srz_min(max_x, image->w - 1);
-    max_y = srz_min(max_y, image->h - 1);
+    max_x = srz_min(max_x, color_buffer->w - 1);
+    max_y = srz_min(max_y, color_buffer->h - 1);
 
     // Rasterize.
     srz_int2_t p;
@@ -615,18 +680,18 @@ void srz_image_raster_tri(srz_image_t* image, srz_int2_t a, srz_int2_t b, srz_in
             int t2 = _srz_t(a, b, p);
 
             if (t0 >= 0 && t1 >= 0 && t2 >= 0) {
-                *srz_image_at(image, p.x, p.y) = color;
+                *srz_color_buffer_at(color_buffer, p.x, p.y) = color;
             }
         }
     }
 }
 
 #ifdef SRZ_SAVE_AND_LOAD
-void srz_image_save_bmp(char const* filename, srz_image_t image) {
+void srz_save_bmp(char const* filename, srz_color_buffer_t color_buffer) {
     srz_byte_t padding[] = {0, 0, 0};
-    int padding_size = (4 - image.w * 3 % 4) % 4;
-    int stride = image.w * 3 + padding_size;
-    int file_size = 54 + stride * image.h;
+    int padding_size = (4 - color_buffer.w * 3 % 4) % 4;
+    int stride = color_buffer.w * 3 + padding_size;
+    int file_size = 54 + stride * color_buffer.h;
 
     srz_byte_t header[54] = {
         'B', 'M',
@@ -634,8 +699,8 @@ void srz_image_save_bmp(char const* filename, srz_image_t image) {
         0, 0, 0, 0,
         54, 0, 0, 0,
         40, 0, 0, 0,
-        (srz_byte_t)image.w, (srz_byte_t)(image.w >> 8), (srz_byte_t)(image.w >> 16), (srz_byte_t)(image.w >> 24),
-        (srz_byte_t)image.h, (srz_byte_t)(image.h >> 8), (srz_byte_t)(image.h >> 16), (srz_byte_t)(image.h >> 24),
+        (srz_byte_t)color_buffer.w, (srz_byte_t)(color_buffer.w >> 8), (srz_byte_t)(color_buffer.w >> 16), (srz_byte_t)(color_buffer.w >> 24),
+        (srz_byte_t)color_buffer.h, (srz_byte_t)(color_buffer.h >> 8), (srz_byte_t)(color_buffer.h >> 16), (srz_byte_t)(color_buffer.h >> 24),
         1, 0,
         3 * 8, 0,
         0, 0, 0, 0,
@@ -650,10 +715,10 @@ void srz_image_save_bmp(char const* filename, srz_image_t image) {
 
     fwrite(header, 1, 54, file);
 
-    for (int y = 0; y < image.h; ++y) {
-        for (int x = 0; x < image.w; ++x) {
-            int i = (image.h - y) * image.h + x;
-            srz_byte3_t pixel = image.pixels[i];
+    for (int y = 0; y < color_buffer.h; ++y) {
+        for (int x = 0; x < color_buffer.w; ++x) {
+            int i = (color_buffer.h - y) * color_buffer.h + x;
+            srz_byte3_t pixel = color_buffer.data[i];
 
             // RBG to BGR.
             srz_byte3_t color = {.r = pixel.b, .g = pixel.g, .b = pixel.r};
@@ -665,6 +730,136 @@ void srz_image_save_bmp(char const* filename, srz_image_t image) {
     }
 
     fclose(file);
+}
+
+int _srz_split(char* str, char const* delims, char** tokens, int max) {
+    int count = 0;
+    char* token = strtok(str, delims);
+    for (; count < max && token; ++count) {
+        tokens[count] = token;
+        token = strtok(SRZ_NULL, delims);
+    }
+    return count;
+}
+
+int srz_load_obj(char const* filename, srz_mesh_t* mesh) {
+    FILE* file = fopen(filename, "r");
+    if (!file) {
+        return 0;
+    }
+
+    mesh->face_count = 0;
+    mesh->position_count = 0;
+    mesh->tex_coord_count = 0;
+    mesh->normal_count = 0;
+
+    int face_max = 128;
+    int position_max = 128;
+    int tex_coord_max = 128;
+    int normal_max = 128;
+
+    mesh->faces = malloc(face_max * sizeof(srz_face_t));
+    mesh->positions = malloc(position_max * sizeof(srz_float3_t));
+    mesh->tex_coords = malloc(tex_coord_max * sizeof(srz_float2_t));
+    mesh->normals = malloc(normal_max * sizeof(srz_float3_t));
+
+    char line[256];
+    while (fgets(line, 256, file)) {
+        char* tokens[5];
+        int token_count = _srz_split(line, " ", tokens, 5);
+
+        if (token_count == 0) {
+            continue;
+        }
+
+        // Vertex position.
+        if (strcmp(tokens[0], "v") == 0) {
+            if (mesh->position_count == position_max) {
+                mesh->positions = realloc(mesh->positions, (position_max *= 2) * sizeof(srz_float3_t));
+            }
+            mesh->positions[mesh->position_count++] = (srz_float3_t){atof(tokens[1]), atof(tokens[2]), atof(tokens[3])};
+        }
+        // Vertex texture coordinate.
+        else if (strcmp(tokens[0], "vt") == 0) {
+            if (mesh->tex_coord_count == tex_coord_max) {
+                mesh->tex_coords = realloc(mesh->tex_coords, (tex_coord_max *= 2) * sizeof(srz_float2_t));
+            }
+            mesh->tex_coords[mesh->tex_coord_count++] = (srz_float2_t){atof(tokens[1]), atof(tokens[2])};
+        }
+        // Vertex normal.
+        else if (strcmp(tokens[0], "vn") == 0) {
+            if (mesh->normal_count == normal_max) {
+                mesh->normals = realloc(mesh->normals, (normal_max *= 2) * sizeof(srz_float3_t));
+            }
+            mesh->normals[mesh->normal_count++] = (srz_float3_t){atof(tokens[1]), atof(tokens[2]), atof(tokens[3])};
+        }
+        // Face.
+        else if (strcmp(tokens[0], "f") == 0) {
+            char* face_tokens[4][3];
+            int face_token_count = token_count - 1;
+            for (int i = 0; i < face_token_count; ++i) {
+                // Split into indices.
+                if (_srz_split(tokens[i + 1], "/", face_tokens[i], 3) != 3) {
+                    return -1;
+                }
+            }
+
+            int position_indices[4];
+            int tex_coord_indices[4];
+            int normal_indices[4];
+
+            for (int i = 0; i < face_token_count; ++i) {
+                position_indices[i] = atoi(face_tokens[i][0]);
+                tex_coord_indices[i] = atoi(face_tokens[i][1]);
+                normal_indices[i] = atoi(face_tokens[i][2]);
+            }
+
+            if (face_token_count == 3) {
+                srz_face_t face;
+                for (int i = 0; i < 3; ++i) {
+                    face.position_indices[i] = position_indices[i];
+                    face.tex_coord_indices[i] = tex_coord_indices[i];
+                    face.normal_indices[i] = normal_indices[i];
+                }
+
+                if (mesh->face_count == face_max) {
+                    mesh->faces = realloc(mesh->faces, (face_max *= 2) * sizeof(srz_face_t));
+                }
+                mesh->faces[mesh->face_count++] = face;
+            }
+            else if (face_token_count == 4) {
+                srz_face_t a, b;
+                for (int i = 0; i < 3; ++i) {
+                    a.position_indices[i] = position_indices[i];
+                    a.tex_coord_indices[i] = tex_coord_indices[i];
+                    a.normal_indices[i] = normal_indices[i];
+
+                    b.position_indices[i] = position_indices[(i + 2) % 4];
+                    b.tex_coord_indices[i] = tex_coord_indices[(i + 2) % 4];
+                    b.normal_indices[i] = normal_indices[(i + 2) % 4];
+                }
+
+                if (mesh->face_count >= face_max - 1) {
+                    mesh->faces = realloc(mesh->faces, (face_max *= 2) * sizeof(srz_face_t));
+                }
+                mesh->faces[mesh->face_count++] = a;
+                mesh->faces[mesh->face_count++] = b;
+            }
+            else {
+                return -1;
+            }
+        }
+    }
+    
+    fclose(file);
+    return 1;
+}
+
+void srz_mesh_free(srz_mesh_t* mesh) {
+    free(mesh->positions);
+    free(mesh->tex_coords);
+    free(mesh->normals);
+    free(mesh->faces);
 }
 #endif
 #endif
