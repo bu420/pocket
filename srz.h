@@ -167,7 +167,7 @@ srz_byte4_t* srz_texture_at(srz_texture_t* texture, int x, int y);
 // @param depth_buffer pass NULL if depth buffering should not be used.
 void srz_raster_line(srz_color_buffer_t* color_buffer, srz_depth_buffer_t* depth_buffer, srz_int2_t a, srz_int2_t b, srz_byte3_t color);
 // @param depth_buffer pass NULL if depth buffering should not be used.
-void srz_raster_triangle(srz_color_buffer_t* color_buffer, srz_depth_buffer_t* depth_buffer, srz_int2_t a, srz_int2_t b, srz_int2_t c, srz_byte3_t color);
+void srz_raster_triangle(srz_color_buffer_t* color_buffer, srz_depth_buffer_t* depth_buffer, srz_float3_t a, srz_float3_t b, srz_float3_t c, srz_byte3_t color);
 #ifdef SRZ_SAVE_AND_LOAD
 void srz_save_bmp(char const* filename, srz_color_buffer_t color_buffer);
 // Simple OBJ loader that WILL break on anything complex format-wise.
@@ -650,37 +650,45 @@ void srz_raster_line(srz_color_buffer_t* color_buffer, srz_depth_buffer_t* depth
     }
 }
 
-int _srz_t(srz_int2_t a, srz_int2_t b, srz_int2_t c) {
+float _srz_t(srz_float3_t a, srz_float3_t b, srz_float3_t c) {
     return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
 }
 
-void srz_raster_triangle(srz_color_buffer_t* color_buffer, srz_depth_buffer_t* depth_buffer, srz_int2_t a, srz_int2_t b, srz_int2_t c, srz_byte3_t color) {
-    if (!depth_buffer) {
-        // No depth buffer used.
-    }
+void srz_raster_triangle(srz_color_buffer_t* color_buffer, srz_depth_buffer_t* depth_buffer, srz_float3_t a, srz_float3_t b, srz_float3_t c, srz_byte3_t color) {
+    srz_int2_t _a = {srz_roundf(a.x), srz_roundf(a.y)};
+    srz_int2_t _b = {srz_roundf(b.x), srz_roundf(b.y)};
+    srz_int2_t _c = {srz_roundf(c.x), srz_roundf(c.y)};
     
-    // Bounding box.
-    int min_x = srz_min3(a.x, b.x, c.x);
-    int min_y = srz_min3(a.y, b.y, c.y);
-    int max_x = srz_max3(a.x, b.x, c.x);
-    int max_y = srz_max3(a.y, b.y, c.y);
+    int min_x = srz_min3(_a.x, _b.x, _c.x);
+    int min_y = srz_min3(_a.y, _b.y, _c.y);
+    int max_x = srz_max3(_a.x, _b.x, _c.x);
+    int max_y = srz_max3(_a.y, _b.y, _c.y);
 
-    // Clip.
     min_x = srz_max(min_x, 0);
     min_y = srz_max(min_y, 0);
     max_x = srz_min(max_x, color_buffer->w - 1);
     max_y = srz_min(max_y, color_buffer->h - 1);
 
-    // Rasterize.
+    float area = _srz_t(a, b, c);
+
     srz_int2_t p;
     for (p.x = min_x; p.x <= max_x; ++p.x) {
         for (p.y = min_y; p.y <= max_y; ++p.y) {
-            int t0 = _srz_t(b, c, p);
-            int t1 = _srz_t(c, a, p);
-            int t2 = _srz_t(a, b, p);
+            srz_float3_t _p = {p.x, p.y, 0};
+            int t0 = _srz_t(b, c, _p);
+            int t1 = _srz_t(c, a, _p);
+            int t2 = _srz_t(a, b, _p);
 
             if (t0 >= 0 && t1 >= 0 && t2 >= 0) {
-                *srz_color_buffer_at(color_buffer, p.x, p.y) = color;
+                t0 /= area;
+                t1 /= area;
+                t2 /= area;
+                float z = 1 / (t0 * a.z + t1 * b.z + t2 * c.z);
+
+                if (z > *srz_depth_buffer_at(depth_buffer, p.x, p.y)) {
+                    *srz_color_buffer_at(color_buffer, p.x, p.y) = color;
+                    *srz_depth_buffer_at(depth_buffer, p.x, p.y) = z;
+                }
             }
         }
     }
@@ -809,9 +817,9 @@ int srz_load_obj(char const* filename, srz_mesh_t* mesh) {
             int normal_indices[4];
 
             for (int i = 0; i < face_token_count; ++i) {
-                position_indices[i] = atoi(face_tokens[i][0]);
-                tex_coord_indices[i] = atoi(face_tokens[i][1]);
-                normal_indices[i] = atoi(face_tokens[i][2]);
+                position_indices[i] = atoi(face_tokens[i][0]) - 1;
+                tex_coord_indices[i] = atoi(face_tokens[i][1]) - 1;
+                normal_indices[i] = atoi(face_tokens[i][2]) - 1;
             }
 
             if (face_token_count == 3) {

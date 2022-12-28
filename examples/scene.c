@@ -26,24 +26,34 @@ int main() {
     color_buffer.h = HEIGHT;
     color_buffer.data = malloc(WIDTH * HEIGHT * sizeof(srz_byte3_t));
 
-    // Gradient background.
-    for (int x = 0; x < WIDTH; ++x) {
-        for (int y = 0; y < HEIGHT; ++y) {
-            srz_byte3_t* pixel = srz_color_buffer_at(&color_buffer, x, y);
+    srz_depth_buffer_t depth_buffer;
+    depth_buffer.w = WIDTH;
+    depth_buffer.h = HEIGHT;
+    depth_buffer.data = malloc(WIDTH * HEIGHT * sizeof(float));
+    srz_depth_buffer_clear(&depth_buffer);
 
-            pixel->r = x * 128 / WIDTH;
-            pixel->g = 0;
-            pixel->b = (x + y) * 128 / (WIDTH + HEIGHT);
+    // Gradient background.
+    for (int y = 0; y < HEIGHT; ++y) {
+        srz_byte3_t top = {141, 160, 184};
+        srz_byte3_t bottom = {20, 20, 20};
+
+        float amount = (float)y / HEIGHT;
+        srz_byte3_t interp = {(bottom.r - top.r) * amount + top.r, (bottom.g - top.g) * amount + top.g, (bottom.b - top.b) * amount + top.b};
+
+        for (int x = 0; x < WIDTH; ++x) {
+            *srz_color_buffer_at(&color_buffer, x, y) = interp;
         }
     }
 
-    srz_float3_t camera_pos = {0, 0, -30};
+    srz_float3_t camera_pos = {15, 15, -25};
     srz_matrix_t view = srz_look_at(camera_pos, (srz_float3_t){0, 0, 0}, (srz_float3_t){0, -1, 0});
     srz_matrix_t projection = srz_perspective(HEIGHT / (float)WIDTH, 75.f * (SRZ_PI / 180), 0.1f, 1000.f);
 
     srz_matrix_t model;
     srz_matrix_init_identity(&model);
     model = srz_matrix_translate(model, (srz_float3_t){-.5, -.5, -.5});
+    model = srz_matrix_rotate_x(model, 90.f * (SRZ_PI / 180));
+    model = srz_matrix_rotate_y(model, 180.f * (SRZ_PI / 180));
 
     srz_matrix_t mvp = srz_matrix_mul(srz_matrix_mul(model, view), projection);
 
@@ -64,19 +74,11 @@ int main() {
         float light = srz_dot(normal, light_dir);
         srz_byte3_t color = {255 * light, 255 * light, 255 * light};
 
-        // Discard invisible triangles.
-        /*if (normal.x * (v0.x - camera_pos.x) + normal.y * (v0.y - camera_pos.y) + normal.z * (v0.z - camera_pos.z) < 0) {
-            continue;
-        }*/
-
-        srz_int2_t tri[3];
+        srz_float3_t tri[3];
         for (int j = 0; j < 3; ++j) {
-            srz_float3_t pos = mesh.positions[mesh.faces[i].position_indices[j]];
-            tri[j].x = srz_roundf(pos.x);
-            tri[j].y = srz_roundf(pos.y);
+            tri[j] = mesh.positions[mesh.faces[i].position_indices[j]];
         }
-
-        srz_raster_triangle(&color_buffer, SRZ_NULL, tri[0], tri[1], tri[2], color);
+        srz_raster_triangle(&color_buffer, &depth_buffer, tri[0], tri[1], tri[2], color);
     }
 
     srz_save_bmp("scene.bmp", color_buffer);
