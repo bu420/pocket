@@ -13,7 +13,8 @@ Example:
 Credits to 'el nora' for sine and cosine implementations.
 */
 
-#pragma once
+#ifndef SRZ_H
+#define SRZ_H
 
 #define SRZ_PI 3.1415926f
 #ifdef __cplusplus
@@ -685,9 +686,14 @@ void srz_raster_triangle(srz_color_buffer_t* color_buffer, srz_depth_buffer_t* d
                 t2 /= area;
                 float z = 1 / (t0 * a.z + t1 * b.z + t2 * c.z);
 
-                if (z > *srz_depth_buffer_at(depth_buffer, p.x, p.y)) {
+                if (depth_buffer) {
+                    if (z > *srz_depth_buffer_at(depth_buffer, p.x, p.y)) {
+                        *srz_color_buffer_at(color_buffer, p.x, p.y) = color;
+                        *srz_depth_buffer_at(depth_buffer, p.x, p.y) = z;
+                    }
+                }
+                else {
                     *srz_color_buffer_at(color_buffer, p.x, p.y) = color;
-                    *srz_depth_buffer_at(depth_buffer, p.x, p.y) = z;
                 }
             }
         }
@@ -869,5 +875,6 @@ void srz_mesh_free(srz_mesh_t* mesh) {
     free(mesh->normals);
     free(mesh->faces);
 }
+#endif
 #endif
 #endif
