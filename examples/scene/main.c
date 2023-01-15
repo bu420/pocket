@@ -82,7 +82,5 @@ int main() {
     }
 
     srz_save_bmp("scene.bmp", color_buffer);
-    free(color_buffer.data);
-
     printf("Done.");
 }

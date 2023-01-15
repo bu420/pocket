@@ -63,7 +63,7 @@ void bootleg_minecraft_init(bootleg_minecraft_t* bootleg_minecraft, int w, int h
         mc->level[i] = BOOTLEG_MINECRAFT_BLOCK_STONE;
     }
 
-    mc->pos = (srz_float3_t){32, 8, 32};
+    mc->pos = (srz_float3_t){-32, -24, -32};
 
     mc->projection = srz_perspective(h / (float)w, 70 * (SRZ_PI / 180), .1f, 1000.f);
 }

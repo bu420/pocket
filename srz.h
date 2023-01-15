@@ -17,11 +17,6 @@ Credits to 'el nora' for sine and cosine implementations.
 #define SRZ_H
 
 #define SRZ_PI 3.1415926f
-#ifdef __cplusplus
-#define SRZ_NULL nullptr
-#else
-#define SRZ_NULL ((void*)0)
-#endif
 
 typedef unsigned char srz_byte_t;
 
@@ -62,6 +57,9 @@ typedef union {
     struct {
         float r, g;
     };
+    struct {
+        float u, v;
+    };
     float values[2];
 } srz_float2_t;
 
@@ -71,6 +69,9 @@ typedef union {
     };
     struct {
         float r, g, b;
+    };
+    struct {
+        float u, v, w;
     };
     float values[3];
 } srz_float3_t;
@@ -144,6 +145,11 @@ float srz_tanf(float n);
 srz_float3_t srz_normalize(srz_float3_t f);
 srz_float3_t srz_cross(srz_float3_t a, srz_float3_t b);
 float srz_dot(srz_float3_t a, srz_float3_t b);
+void srz_swap(int* a, int* b);
+void srz_swapf(float* a, float* b);
+void srz_int2_swap(srz_int2_t* a, srz_int2_t* b);
+void srz_float2_swap(srz_float2_t* a, srz_float2_t* b);
+void srz_float3_swap(srz_float3_t* a, srz_float3_t* b);
 
 void srz_matrix_init_zero(srz_matrix_t* matrix);
 void srz_matrix_init_identity(srz_matrix_t* matrix);
@@ -165,10 +171,13 @@ void srz_color_buffer_clear(srz_color_buffer_t* color_buffer, srz_byte3_t color)
 float* srz_depth_buffer_at(srz_depth_buffer_t* depth_buffer, int x, int y);
 void srz_depth_buffer_clear(srz_depth_buffer_t* depth_buffer);
 srz_byte4_t* srz_texture_at(srz_texture_t* texture, int x, int y);
+srz_byte4_t srz_texture_sample(srz_texture_t texture, float u, float v);
 // @param depth_buffer pass NULL if depth buffering should not be used.
 void srz_raster_line(srz_color_buffer_t* color_buffer, srz_depth_buffer_t* depth_buffer, srz_int2_t a, srz_int2_t b, srz_byte3_t color);
 // @param depth_buffer pass NULL if depth buffering should not be used.
 void srz_raster_triangle(srz_color_buffer_t* color_buffer, srz_depth_buffer_t* depth_buffer, srz_float3_t a, srz_float3_t b, srz_float3_t c, srz_byte3_t color);
+// @param depth_buffer pass NULL if depth buffering should not be used.
+void srz_raster_triangle_texture(srz_color_buffer_t* color_buffer, srz_depth_buffer_t* depth_buffer, srz_int2_t p0, srz_int2_t p1, srz_int2_t p2, srz_float3_t t0, srz_float3_t t1, srz_float3_t t2, srz_texture_t texture);
 #ifdef SRZ_SAVE_AND_LOAD
 void srz_save_bmp(char const* filename, srz_color_buffer_t color_buffer);
 // Simple OBJ loader that WILL break on anything complex format-wise.
@@ -339,6 +348,34 @@ srz_float3_t srz_cross(srz_float3_t a, srz_float3_t b) {
 
 float srz_dot(srz_float3_t a, srz_float3_t b) {
     return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+void srz_swap(int* a, int* b) {
+    int temp = *a;
+    *a = *b;
+    *b = temp;
+}
+
+void srz_swapf(float* a, float* b) {
+    float temp = *a;
+    *a = *b;
+    *b = temp;
+}
+
+void srz_int2_swap(srz_int2_t* a, srz_int2_t* b) {
+    srz_swap(&a->x, &b->x);
+    srz_swap(&a->y, &b->y);
+}
+
+void srz_float2_swap(srz_float2_t* a, srz_float2_t* b) {
+    srz_swapf(&a->x, &b->x);
+    srz_swapf(&a->y, &b->y);
+}
+
+void srz_float3_swap(srz_float3_t* a, srz_float3_t* b) {
+    srz_swapf(&a->x, &b->x);
+    srz_swapf(&a->y, &b->y);
+    srz_swapf(&a->z, &b->z);
 }
 
 void srz_matrix_init_zero(srz_matrix_t* matrix) {
@@ -562,6 +599,10 @@ srz_byte4_t* srz_texture_at(srz_texture_t* texture, int x, int y) {
     return &texture->data[y * texture->w + x];
 }
 
+srz_byte4_t srz_texture_sample(srz_texture_t texture, float u, float v) {
+    return *srz_texture_at(&texture, (int)(u * texture.w), (int)(v * texture.h - 1));
+}
+
 void srz_raster_line(srz_color_buffer_t* color_buffer, srz_depth_buffer_t* depth_buffer, srz_int2_t a, srz_int2_t b, srz_byte3_t color) {
     if (!depth_buffer) {
         // No depth buffer used.
@@ -700,6 +741,151 @@ void srz_raster_triangle(srz_color_buffer_t* color_buffer, srz_depth_buffer_t* d
     }
 }
 
+void srz_raster_triangle_texture(srz_color_buffer_t* color_buffer, srz_depth_buffer_t* depth_buffer, srz_int2_t p0, srz_int2_t p1, srz_int2_t p2, srz_float3_t t0, srz_float3_t t1, srz_float3_t t2, srz_texture_t texture) {
+    if (p1.y < p0.y) {
+        srz_int2_swap(&p0, &p1);
+        srz_float3_swap(&t0, &t1);
+    }
+    if (p2.y < p0.y) {
+        srz_int2_swap(&p0, &p2);
+        srz_float3_swap(&t0, &t2);
+    }
+    if (p2.y < p1.y) {
+        srz_int2_swap(&p1, &p2);
+        srz_float3_swap(&t1, &t2);
+    }
+
+    srz_int2_t delta_p0_p1 = {p1.x - p0.x, p1.y - p0.y};
+    srz_int2_t delta_p0_p2 = {p2.x - p0.x, p2.y - p0.y};
+    srz_float3_t delta_t0_t1 = {t1.u - t0.u, t1.v - t0.v, t1.w - t0.w};
+    srz_float3_t delta_t0_t2 = {t2.u - t0.u, t2.v - t0.v, t2.w - t0.w};
+
+    float delta_x_step_0 = 0;
+    float delta_x_step_1 = 0;
+    srz_float3_t delta_tex_coord_step_0 = {0, 0, 0};
+    srz_float3_t delta_tex_coord_step_1 = {0, 0, 0};
+
+    if (delta_p0_p1.y) {
+        delta_x_step_0 = delta_p0_p1.x / srz_absf(delta_p0_p1.y);
+
+        delta_tex_coord_step_0.u = delta_t0_t1.u / srz_absf(delta_p0_p1.y);
+        delta_tex_coord_step_0.v = delta_t0_t1.v / srz_absf(delta_p0_p1.y);
+        delta_tex_coord_step_0.w = delta_t0_t1.w / srz_absf(delta_p0_p1.y);
+    }
+    if (delta_p0_p2.y) {
+        delta_x_step_1 = delta_p0_p2.x / srz_absf(delta_p0_p2.y);
+
+        delta_tex_coord_step_1.u = delta_t0_t2.u / srz_absf(delta_p0_p2.y);
+        delta_tex_coord_step_1.v = delta_t0_t2.v / srz_absf(delta_p0_p2.y);
+        delta_tex_coord_step_1.w = delta_t0_t2.w / srz_absf(delta_p0_p2.y);
+    }
+
+    srz_float3_t tex_coord;
+
+    if (delta_p0_p1.y) {
+        for (int i = 0; i <= p0.y; ++i) {
+            int x_step_0 = p0.x + (i - p0.y) * delta_x_step_0;
+            int x_step_1 = p0.x + (i - p0.y) * delta_x_step_1;
+
+            srz_float3_t tex_coord_step_0 = {t0.u + (i - p0.y) * delta_tex_coord_step_0.u, t0.v + (i - p0.y) * delta_tex_coord_step_0.v, t0.w + (i - p0.y) * delta_tex_coord_step_0.w};
+            srz_float3_t tex_coord_step_1 = {t0.u + (i - p0.y) * delta_tex_coord_step_1.u, t0.v + (i - p0.y) * delta_tex_coord_step_1.v, t0.w + (i - p0.y) * delta_tex_coord_step_1.w};
+
+            if (x_step_0 > x_step_1) {
+                srz_swap(&x_step_0, &x_step_1);
+                srz_float3_swap(&tex_coord_step_0, &tex_coord_step_1);
+            }
+
+            tex_coord = tex_coord_step_0;
+
+            float tex_coord_step = 1.f / (x_step_1 - x_step_0);
+            float t = 0;
+
+            for (int j = x_step_0; j < x_step_1; ++j) {
+                tex_coord.u = (1 - t) * tex_coord_step_0.u + t * tex_coord_step_1.u;
+                tex_coord.v = (1 - t) * tex_coord_step_0.v + t * tex_coord_step_1.v;
+                tex_coord.w = (1 - t) * tex_coord_step_0.w + t * tex_coord_step_1.w;
+
+                srz_byte3_t* pixel = srz_color_buffer_at(color_buffer, j, i);
+                srz_byte4_t color = srz_texture_sample(texture, tex_coord.u / tex_coord.w, tex_coord.v / tex_coord.w);
+
+                if (depth_buffer) {
+                    float* depth = srz_depth_buffer_at(depth_buffer, j, i);
+
+                    if (tex_coord.w > *depth) {
+                        *pixel = (srz_byte3_t){color.r, color.g, color.b};
+                        *depth = tex_coord.w;
+                    }
+                }
+                else {
+                    *pixel = (srz_byte3_t){color.r, color.g, color.b};
+                }
+
+                t += tex_coord_step;
+            }
+        }
+    }
+
+    srz_int2_t delta_p1_p2 = {p2.x - p1.x, p2.y - p1.y};
+    srz_float3_t delta_t1_t2 = {t2.u - t1.u, t2.v - t1.v, t2.w - t1.w};
+
+    delta_tex_coord_step_0.u = 0;
+    delta_tex_coord_step_0.v = 0;
+
+    if (delta_p1_p2.y) {
+        delta_x_step_0 = delta_p1_p2.x / srz_absf(delta_p1_p2.y);
+        
+        delta_tex_coord_step_0.u = delta_t1_t2.u / srz_absf(delta_p1_p2.y);
+        delta_tex_coord_step_0.v = delta_t1_t2.v / srz_absf(delta_p1_p2.y);
+        delta_tex_coord_step_0.w = delta_t1_t2.w / srz_absf(delta_p1_p2.y);
+    }
+    if (delta_p0_p2.y) {
+        delta_x_step_1 = delta_p0_p2.x / srz_absf(delta_p0_p2.y);
+    }
+
+    if (delta_p1_p2.y) {
+        for (int i = p1.y; i <= p2.y; ++i) {
+            int x_step_0 = p1.x + (i - p1.y) * delta_x_step_0;
+            int x_step_1 = p0.x + (i - p0.y) * delta_x_step_1;
+
+            srz_float3_t tex_coord_step_0 = {t1.u + (i - p1.y) * delta_tex_coord_step_0.u, t1.v + (i - p1.y) * delta_tex_coord_step_0.v, t1.w + (i - p1.y) * delta_tex_coord_step_0.w};
+            srz_float3_t tex_coord_step_1 = {t0.u + (i - p0.y) * delta_tex_coord_step_1.u, t0.v + (i - p0.y) * delta_tex_coord_step_1.v, t0.w + (i - p0.y) * delta_tex_coord_step_1.w};
+
+            if (x_step_0 > x_step_1) {
+                srz_swap(&x_step_0, &x_step_1);
+                srz_float3_swap(&tex_coord_step_0, &tex_coord_step_1);
+            }
+
+            tex_coord = tex_coord_step_0;
+
+            float tex_coord_step = 1.f / (x_step_1 - x_step_0);
+            float t = 0;
+
+            for (int j = x_step_0; j < x_step_1; ++j) {
+                tex_coord.u = (1 - t) * tex_coord_step_0.u + t * tex_coord_step_1.u;
+                tex_coord.v = (1 - t) * tex_coord_step_0.v + t * tex_coord_step_1.v;
+                tex_coord.w = (1 - t) * tex_coord_step_0.w + t * tex_coord_step_1.w;
+
+                srz_byte3_t* pixel = srz_color_buffer_at(color_buffer, j, i);
+                srz_byte4_t color = srz_texture_sample(texture, tex_coord.u / tex_coord.w, tex_coord.v / tex_coord.w);
+
+                if (depth_buffer) {
+                    float* depth = srz_depth_buffer_at(depth_buffer, j, i);
+
+                    if (tex_coord.w > *depth) {
+                        *pixel = (srz_byte3_t){color.r, color.g, color.b};
+                        *depth = tex_coord.w;
+                    }
+                }
+                else {
+                    *pixel = (srz_byte3_t){color.r, color.g, color.b};
+                }
+
+                t += tex_coord_step;
+            }
+        }
+    }
+}
+
 #ifdef SRZ_SAVE_AND_LOAD
 void srz_save_bmp(char const* filename, srz_color_buffer_t color_buffer) {
     srz_byte_t padding[] = {0, 0, 0};
@@ -733,10 +919,7 @@ void srz_save_bmp(char const* filename, srz_color_buffer_t color_buffer) {
         for (int x = 0; x < color_buffer.w; ++x) {
             int i = (color_buffer.h - y) * color_buffer.h + x;
             srz_byte3_t pixel = color_buffer.data[i];
-
-            // RBG to BGR.
             srz_byte3_t color = {.r = pixel.b, .g = pixel.g, .b = pixel.r};
-
             fwrite(&color, 3, 1, file);
         }
 
@@ -751,7 +934,7 @@ int _srz_split(char* str, char const* delims, char** tokens, int max) {
     char* token = strtok(str, delims);
     for (; count < max && token; ++count) {
         tokens[count] = token;
-        token = strtok(SRZ_NULL, delims);
+        token = strtok(NULL, delims);
     }
     return count;
 }
