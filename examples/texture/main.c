@@ -52,6 +52,14 @@ int main() {
     srz_raster_triangle(&color_buffer, NULL, (srz_float3_t){positions[0].x, positions[0].y, 0}, (srz_float3_t){positions[1].x, positions[1].y, 0}, (srz_float3_t){positions[2].x, positions[2].y, 0}, (srz_byte3_t){0, 255, 120});
     srz_raster_triangle(&color_buffer, NULL, (srz_float3_t){positions[2].x, positions[2].y, 0}, (srz_float3_t){positions[3].x, positions[3].y, 0}, (srz_float3_t){positions[0].x, positions[0].y, 0}, (srz_byte3_t){0, 255, 120});
 
+    // Line plotting test.
+    srz_int2_t steps[200];
+    int count = srz_bresenham_line((srz_int2_t){0, 30}, (srz_int2_t){10, 0}, steps);
+    for (int i = 0; i < count; ++i) {
+        printf("x = %d, y = %d\n", steps[i].x, steps[i].y);
+        *srz_color_buffer_at(&color_buffer, steps[i].x, steps[i].y) = (srz_byte3_t){255, 0, 0};
+    }
+
     srz_save_bmp("texture.bmp", color_buffer);
     printf("Done.");
 }

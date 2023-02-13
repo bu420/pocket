@@ -1,2 +1,4 @@
-# software-rasterizer
-(WIP) Single-header low-level 3D rasterizer written in C with no dependencies (no standard library), although some features which require access to parts of the standard library can be enabled. Check the top of the header for further instructions.
+# llsr (low-level software rasterizer)
+(WIP) A low-level 3D rasterizer library written in C. The core files `llsr.h` and `llsr.c` do not include any parts of the standard library.
+
+Credits to 'el nora' for sine and cosine implementations.
