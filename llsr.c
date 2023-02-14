@@ -390,44 +390,6 @@ llsr_matrix_t llsr_perspective(float aspect, float fov, float near, float far) {
     return m;
 }
 
-int llsr_bresenham_line(llsr_int2_t start, llsr_int2_t end, llsr_int2_t* steps) {
-    llsr_int2_t delta = {llsr_abs(end.x - start.x), -llsr_abs(end.y - start.y)};
-    llsr_int2_t dir = {start.x < end.x ? 1 : -1, start.y < end.y ? 1 : -1};
-    llsr_int2_t step = start;
-    int error = delta.x + delta.y;
-    int i = 0;
-
-    while (1) {
-        steps[i++] = step;
-
-        if (step.x == end.x && step.y == end.y) {
-            break;
-        }
-
-        if (2 * error >= delta.y) {
-            if (step.x == end.x) {
-                break;
-            }
-
-            error += delta.y;
-            step.x += dir.x;
-        }
-        if (2 * error <= delta.x) {
-            if (step.y == end.y) {
-                break;
-            }
-
-            error += delta.x;
-            step.y += dir.y;
-        }
-    }
-    return i;
-}
-
-void llsr_raster_triangle(llsr_color_buffer_t* color_buffer, llsr_int2_t v0, llsr_int2_t v1, llsr_int2_t v2, llsr_byte3_t color0, llsr_byte3_t color1, llsr_byte3_t color2) {
-    
-}
-
 llsr_byte3_t* llsr_color_buffer_at(llsr_color_buffer_t* color_buffer, int x, int y) {
     return &color_buffer->data[y * color_buffer->w + x];
 }
@@ -454,4 +416,101 @@ llsr_byte4_t* llsr_texture_at(llsr_texture_t* texture, int x, int y) {
 
 llsr_byte4_t llsr_texture_sample(llsr_texture_t texture, float u, float v) {
     return *llsr_texture_at(&texture, (int)(u * texture.w), (int)(v * texture.h - 1));
+}
+
+llsr_bresenham_line_t llsr_bresenham_line_create(llsr_int2_t start, llsr_int2_t end) {
+    llsr_bresenham_line_t line;
+    line.start = start;
+    line.end = end;
+    line.current = start;
+    line.delta = (llsr_int2_t){llsr_abs(end.x - start.x), -llsr_abs(end.y - start.y)};
+    line.dir = (llsr_int2_t){start.x < end.x ? 1 : -1, start.y < end.y ? 1 : -1};
+    line.deviation = line.delta.x + line.delta.y;
+    return line;
+}
+
+int llsr_bresenham_line_step(llsr_bresenham_line_t* line) {
+    if (line->current.x == line->end.x && line->current.y == line->end.y) {
+        return 0;
+    }
+    if (2 * line->deviation >= line->delta.y) {
+        if (line->current.x == line->end.x) {
+            return 0;
+        }
+
+        line->deviation += line->delta.y;
+        line->current.x += line->dir.x;
+    }
+    if (2 * line->deviation <= line->delta.x) {
+        if (line->current.y == line->end.y) {
+            return 0;
+        }
+
+        line->deviation += line->delta.x;
+        line->current.y += line->dir.y;
+    }
+    return 1;
+}
+
+void llsr_raster_line(llsr_color_buffer_t* color_buffer, llsr_int2_t start, llsr_int2_t end, llsr_byte3_t color) {
+    llsr_bresenham_line_t line = llsr_bresenham_line_create(start, end);
+    do {
+        *llsr_color_buffer_at(color_buffer, line.current.x, line.current.y) = color;
+    } 
+    while (llsr_bresenham_line_step(&line));
+}
+
+int _llsr_bresenham_line_step_until_vertical_difference(llsr_bresenham_line_t* line) {
+    int y = line->current.y;
+
+    while (llsr_bresenham_line_step(line)) {
+        if (line->current.y != y) {
+            return 1;
+        }
+        y = line->current.y;
+    }
+    return 0;
+}
+
+void llsr_raster_triangle_2d(llsr_color_buffer_t* color_buffer, llsr_int2_t pos0, llsr_int2_t pos1, llsr_int2_t pos2, llsr_byte3_t color) {
+    // Sort by height.
+    if (pos0.y > pos1.y) {
+        llsr_int2_swap(&pos0, &pos1);
+    }
+    if (pos0.y > pos2.y) {
+        llsr_int2_swap(&pos0, &pos2);
+    }
+    if (pos1.y > pos2.y) {
+        llsr_int2_swap(&pos1, &pos2);
+    }
+    
+    llsr_bresenham_line_t line_0_1 = llsr_bresenham_line_create(pos0, pos1);
+    llsr_bresenham_line_t line_0_2 = llsr_bresenham_line_create(pos0, pos2);
+    llsr_bresenham_line_t line_1_2 = llsr_bresenham_line_create(pos1, pos2);
+
+    // Top to bottom, left to right.
+    for (int y = pos0.y; y <= pos2.y; ++y) {
+        int start = line_0_1.current.x;
+        int end = line_0_2.current.x;
+
+        if (start > end) {
+            llsr_swap(&start, &end);
+        }
+        for (int x = start; x <= end; ++x) {
+            // Check bounds, this could definitely be optimized.
+            if (x >= 0 && x < color_buffer->w && y >= 0 && y < color_buffer->h) {
+                *llsr_color_buffer_at(color_buffer, x, y) = color;
+            }
+        }
+
+        // Dirty switch line when line_0_1 reaches it's end.
+        if (!_llsr_bresenham_line_step_until_vertical_difference(&line_0_1)) {
+            line_0_1 = line_1_2;
+        }
+        _llsr_bresenham_line_step_until_vertical_difference(&line_0_2);
+    }
+}
+
+void llsr_raster_triangle_3d(llsr_color_buffer_t* color_buffer, llsr_depth_buffer_t* depth_buffer, llsr_float3_t pos0, llsr_float3_t pos1, llsr_float3_t pos2, llsr_byte3_t color) {
+    
 }

@@ -90,6 +90,15 @@ typedef struct {
     llsr_byte4_t* data;
 } llsr_texture_t;
 
+typedef struct {
+    llsr_int2_t start;
+    llsr_int2_t end;
+    llsr_int2_t current;
+    llsr_int2_t delta;
+    llsr_int2_t dir;
+    int deviation;
+} llsr_bresenham_line_t;
+
 int llsr_max(int a, int b);
 int llsr_min(int a, int b);
 int llsr_max3(int a, int b, int c);
@@ -128,21 +137,22 @@ llsr_float3_t llsr_matrix_mul_float3(llsr_matrix_t matrix, llsr_float3_t f);
 llsr_float4_t llsr_matrix_mul_float4(llsr_matrix_t matrix, llsr_float4_t f);
 llsr_float3_t llsr_float3_mul_matrix(llsr_float3_t f, llsr_matrix_t matrix);
 llsr_float4_t llsr_float4_mul_matrix(llsr_float4_t f, llsr_matrix_t matrix);
+
 llsr_matrix_t llsr_look_at(llsr_float3_t pos, llsr_float3_t target, llsr_float3_t up);
 llsr_matrix_t llsr_perspective(float aspect, float fov, float near, float far);
 
-/* 
-Bresenham's line algorithm.
-@param steps Will be overridden with points along a rasterized line from start to end.
-@return Number of steps.
-*/
-int llsr_bresenham_line(llsr_int2_t start, llsr_int2_t end, llsr_int2_t* steps);
-void llsr_raster_triangle(llsr_color_buffer_t* color_buffer, llsr_int2_t v0, llsr_int2_t v1, llsr_int2_t v2, llsr_byte3_t color0, llsr_byte3_t color1, llsr_byte3_t color2);
 llsr_byte3_t* llsr_color_buffer_at(llsr_color_buffer_t* color_buffer, int x, int y);
 void llsr_color_buffer_clear(llsr_color_buffer_t* color_buffer, llsr_byte3_t color);
 float* llsr_depth_buffer_at(llsr_depth_buffer_t* depth_buffer, int x, int y);
 void llsr_depth_buffer_clear(llsr_depth_buffer_t* depth_buffer);
 llsr_byte4_t* llsr_texture_at(llsr_texture_t* texture, int x, int y);
 llsr_byte4_t llsr_texture_sample(llsr_texture_t texture, float u, float v);
+
+llsr_bresenham_line_t llsr_bresenham_line_create(llsr_int2_t start, llsr_int2_t end);
+// @return true while it has not yet reached the end position.
+int llsr_bresenham_line_step(llsr_bresenham_line_t* line);
+void llsr_raster_line(llsr_color_buffer_t* color_buffer, llsr_int2_t start, llsr_int2_t end, llsr_byte3_t color);
+void llsr_raster_triangle_2d(llsr_color_buffer_t* color_buffer, llsr_int2_t pos0, llsr_int2_t pos1, llsr_int2_t pos2, llsr_byte3_t color);
+void llsr_raster_triangle_3d(llsr_color_buffer_t* color_buffer, llsr_depth_buffer_t* depth_buffer, llsr_float3_t pos0, llsr_float3_t pos1, llsr_float3_t pos2, llsr_byte3_t color);
 
 #endif
