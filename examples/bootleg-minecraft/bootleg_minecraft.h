@@ -59,7 +59,7 @@ void bootleg_minecraft_init(bootleg_minecraft_t* bootleg_minecraft, int w, int h
     mc->depth_buffer.data = depth_buffer_memory;
 
     mc->level = level_4096_blocks_memory;
-    for (int i = 0; i < 4096; ++i) {
+    for (int i = 0; i < 4096; i++) {
         mc->level[i] = BOOTLEG_MINECRAFT_BLOCK_STONE;
     }
 
@@ -96,9 +96,9 @@ void bootleg_minecraft_update(bootleg_minecraft_t* bootleg_minecraft, int elapse
     srz_depth_buffer_clear(&mc->depth_buffer);
 
     // Render each block.
-    for (int x = 0; x < 16; ++x) {
-        for (int y = 0; y < 16; ++y) {
-            for (int z = 0; z < 16; ++z) {
+    for (int x = 0; x < 16; x++) {
+        for (int y = 0; y < 16; y++) {
+            for (int z = 0; z < 16; z++) {
                 if (mc->level[lvl_idx(x, y, z)] == BOOTLEG_MINECRAFT_BLOCK_NONE) {
                     continue;
                 }
@@ -110,10 +110,10 @@ void bootleg_minecraft_update(bootleg_minecraft_t* bootleg_minecraft, int elapse
                 srz_matrix_t mvp = srz_matrix_mul(srz_matrix_mul(model, view), mc->projection);
 
                 // 12 triangles in a cube.
-                for (int i = 0; i < 12; ++i) {
+                for (int i = 0; i < 12; i++) {
                     srz_float3_t tri[3];
-                    for (int j = 0; j < 3; ++j) {
-                        for (int k = 0; k < 3; ++k) {
+                    for (int j = 0; j < 3; j++) {
+                        for (int k = 0; k < 3; k++) {
                             tri[j].values[k] = cube_vertex_positions[i * 9 + j * 3 + k];
                         }
 
@@ -125,7 +125,7 @@ void bootleg_minecraft_update(bootleg_minecraft_t* bootleg_minecraft, int elapse
                     }
 
                     srz_float3_t norm;
-                    for (int j = 0; j < 3; ++j) {
+                    for (int j = 0; j < 3; j++) {
                         norm.values[j] = cube_vertex_normals[(i / 2) * 3 + j];
                     }
 

@@ -149,9 +149,9 @@ llsr_byte4_t* llsr_texture_at(llsr_texture_t* texture, int x, int y);
 llsr_byte4_t llsr_texture_sample(llsr_texture_t texture, float u, float v);
 
 llsr_bresenham_line_t llsr_bresenham_line_create(llsr_int2_t start, llsr_int2_t end);
-// @return true while it has not yet reached the end position.
+// @return true while it has not yet reached it's end position.
 int llsr_bresenham_line_step(llsr_bresenham_line_t* line);
-void llsr_raster_line(llsr_color_buffer_t* color_buffer, llsr_int2_t start, llsr_int2_t end, llsr_byte3_t color);
+void llsr_raster_line(llsr_color_buffer_t* color_buffer, llsr_int2_t start, llsr_int2_t end, llsr_byte3_t start_color, llsr_byte3_t end_color);
 void llsr_raster_triangle_2d(llsr_color_buffer_t* color_buffer, llsr_int2_t pos0, llsr_int2_t pos1, llsr_int2_t pos2, llsr_byte3_t color);
 void llsr_raster_triangle_3d(llsr_color_buffer_t* color_buffer, llsr_depth_buffer_t* depth_buffer, llsr_float3_t pos0, llsr_float3_t pos1, llsr_float3_t pos2, llsr_byte3_t color);
 

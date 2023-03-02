@@ -31,8 +31,8 @@ int main(int argc, char** argv) {
 
         SDL_RenderClear(renderer);
 
-        for (int x = 0; x < WIDTH; ++x) {
-            for (int y = 0; y < HEIGHT; ++y) {
+        for (int x = 0; x < WIDTH; x++) {
+            for (int y = 0; y < HEIGHT; y++) {
                 srz_byte3_t* pixel = srz_color_buffer_at(&minecraft.color_buffer, x, y);
                 SDL_SetRenderDrawColor(renderer, pixel->r, pixel->g, pixel->b, 255);
                 SDL_RenderDrawPoint(renderer, x, y);

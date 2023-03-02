@@ -56,7 +56,7 @@ float llsr_sqrtf(float n) {
         hi *= 0.1;
     }
 
-    for (int i = 0; i < 100; ++i) {
+    for (int i = 0; i < 100; i++) {
         mid = (lo + hi) / 2;
         if (mid * mid == n) {
             return mid;
@@ -187,15 +187,15 @@ void llsr_float3_swap(llsr_float3_t* a, llsr_float3_t* b) {
 
 llsr_byte3_t llsr_byte3_lerp(llsr_byte3_t a, llsr_byte3_t b, float amount) {
     llsr_byte3_t result;
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 3; i++) {
         result.values[i] = a.values[i] * (1 - amount) + b.values[i] * amount;
     }
     return result;
 }
 
 void llsr_matrix_init_zero(llsr_matrix_t* matrix) {
-    for (int x = 0; x < 4; ++x) {
-        for (int y = 0; y < 4; ++y) {
+    for (int x = 0; x < 4; x++) {
+        for (int y = 0; y < 4; y++) {
             matrix->m[x][y] = 0;
         }
     }
@@ -203,7 +203,7 @@ void llsr_matrix_init_zero(llsr_matrix_t* matrix) {
 
 void llsr_matrix_init_identity(llsr_matrix_t* matrix) {
     llsr_matrix_init_zero(matrix);
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 4; i++) {
         matrix->m[i][i] = 1;
     }
 }
@@ -212,9 +212,9 @@ llsr_matrix_t llsr_matrix_mul(llsr_matrix_t a, llsr_matrix_t b) {
     llsr_matrix_t result;
     llsr_matrix_init_zero(&result);
 
-    for (int x = 0; x < 4; ++x) {
-        for (int y = 0; y < 4; ++y) {
-            for (int i = 0; i < 4; ++i) {
+    for (int x = 0; x < 4; x++) {
+        for (int y = 0; y < 4; y++) {
+            for (int i = 0; i < 4; i++) {
                 result.m[x][y] += a.m[x][i] * b.m[i][y];
             }
         }
@@ -291,9 +291,9 @@ llsr_matrix_t llsr_matrix_scale(llsr_matrix_t matrix, llsr_float3_t f) {
 
 llsr_float3_t llsr_matrix_mul_float3(llsr_matrix_t matrix, llsr_float3_t f) {
     llsr_float4_t f4;
-    for (int x = 0; x < 4; ++x) {
+    for (int x = 0; x < 4; x++) {
         float i = 0;
-        for (int y = 0; y < 3; ++y) {
+        for (int y = 0; y < 3; y++) {
             i += matrix.m[x][y] * f.values[y];
         }
         f4.values[x] = i + matrix.m[x][3];
@@ -311,9 +311,9 @@ llsr_float3_t llsr_matrix_mul_float3(llsr_matrix_t matrix, llsr_float3_t f) {
 
 llsr_float4_t llsr_matrix_mul_float4(llsr_matrix_t matrix, llsr_float4_t f) {
     llsr_float4_t result;
-    for (int x = 0; x < 4; ++x) {
+    for (int x = 0; x < 4; x++) {
         float i = 0;
-        for (int y = 0; y < 4; ++y) {
+        for (int y = 0; y < 4; y++) {
             i += matrix.m[x][y] * f.values[y];
         }
         result.values[x] = i;
@@ -323,9 +323,9 @@ llsr_float4_t llsr_matrix_mul_float4(llsr_matrix_t matrix, llsr_float4_t f) {
 
 llsr_float3_t llsr_float3_mul_matrix(llsr_float3_t f, llsr_matrix_t matrix) {
     llsr_float4_t f4;
-    for (int y = 0; y < 4; ++y) {
+    for (int y = 0; y < 4; y++) {
         float i = 0;
-        for (int x = 0; x < 3; ++x) {
+        for (int x = 0; x < 3; x++) {
             i += matrix.m[x][y] * f.values[x];
         }
         f4.values[y] = i + matrix.m[3][y];
@@ -343,9 +343,9 @@ llsr_float3_t llsr_float3_mul_matrix(llsr_float3_t f, llsr_matrix_t matrix) {
 
 llsr_float4_t llsr_float4_mul_matrix(llsr_float4_t f, llsr_matrix_t matrix) {
     llsr_float4_t result;
-    for (int y = 0; y < 4; ++y) {
+    for (int y = 0; y < 4; y++) {
         float i = 0;
-        for (int x = 0; x < 4; ++x) {
+        for (int x = 0; x < 4; x++) {
             i += matrix.m[x][y] * f.values[x];
         }
         result.values[y] = i;
@@ -395,7 +395,7 @@ llsr_byte3_t* llsr_color_buffer_at(llsr_color_buffer_t* color_buffer, int x, int
 }
 
 void llsr_color_buffer_clear(llsr_color_buffer_t* color_buffer, llsr_byte3_t color) {
-    for (int i = 0; i < color_buffer->w * color_buffer->h; ++i) {
+    for (int i = 0; i < color_buffer->w * color_buffer->h; i++) {
         color_buffer->data[i] = color;
     }
 }
@@ -405,7 +405,7 @@ float* llsr_depth_buffer_at(llsr_depth_buffer_t* depth_buffer, int x, int y) {
 }
 
 void llsr_depth_buffer_clear(llsr_depth_buffer_t* depth_buffer) {
-    for (int i = 0; i < depth_buffer->w * depth_buffer->h; ++i) {
+    for (int i = 0; i < depth_buffer->w * depth_buffer->h; i++) {
         depth_buffer->data[i] = 0;
     }
 }
@@ -452,12 +452,33 @@ int llsr_bresenham_line_step(llsr_bresenham_line_t* line) {
     return 1;
 }
 
-void llsr_raster_line(llsr_color_buffer_t* color_buffer, llsr_int2_t start, llsr_int2_t end, llsr_byte3_t color) {
+// TODO: find more accurate way.
+float _llsr_bresenham_line_inverse_lerp(llsr_int2_t start, llsr_int2_t end, llsr_int2_t current) {
+    if (end.x - start.x > end.y - start.y) {
+        return (current.x - start.x) / (float)(end.x - start.x);
+    }
+    return (current.y - start.y) / (float)(end.y - start.y);
+}
+
+void llsr_raster_line(llsr_color_buffer_t* color_buffer, llsr_int2_t start, llsr_int2_t end, llsr_byte3_t start_color, llsr_byte3_t end_color) {
     llsr_bresenham_line_t line = llsr_bresenham_line_create(start, end);
     do {
-        *llsr_color_buffer_at(color_buffer, line.current.x, line.current.y) = color;
+        llsr_byte3_t current_color = llsr_byte3_lerp(start_color, end_color, _llsr_bresenham_line_inverse_lerp(start, end, line.current));
+        *llsr_color_buffer_at(color_buffer, line.current.x, line.current.y) = current_color;
     } 
     while (llsr_bresenham_line_step(&line));
+}
+
+void _llsr_sort_triangle_vertices_by_height(llsr_int2_t* pos0, llsr_int2_t* pos1, llsr_int2_t* pos2) {
+    if (pos0->y > pos1->y) {
+        llsr_int2_swap(pos0, pos1);
+    }
+    if (pos0->y > pos2->y) {
+        llsr_int2_swap(pos0, pos2);
+    }
+    if (pos1->y > pos2->y) {
+        llsr_int2_swap(pos1, pos2);
+    }
 }
 
 int _llsr_bresenham_line_step_until_vertical_difference(llsr_bresenham_line_t* line) {
@@ -472,42 +493,44 @@ int _llsr_bresenham_line_step_until_vertical_difference(llsr_bresenham_line_t* l
     return 0;
 }
 
-void llsr_raster_triangle_2d(llsr_color_buffer_t* color_buffer, llsr_int2_t pos0, llsr_int2_t pos1, llsr_int2_t pos2, llsr_byte3_t color) {
-    // Sort by height.
-    if (pos0.y > pos1.y) {
-        llsr_int2_swap(&pos0, &pos1);
-    }
-    if (pos0.y > pos2.y) {
-        llsr_int2_swap(&pos0, &pos2);
-    }
-    if (pos1.y > pos2.y) {
-        llsr_int2_swap(&pos1, &pos2);
-    }
-    
-    llsr_bresenham_line_t line_0_1 = llsr_bresenham_line_create(pos0, pos1);
-    llsr_bresenham_line_t line_0_2 = llsr_bresenham_line_create(pos0, pos2);
-    llsr_bresenham_line_t line_1_2 = llsr_bresenham_line_create(pos1, pos2);
-
-    // Top to bottom, left to right.
-    for (int y = pos0.y; y <= pos2.y; ++y) {
-        int start = line_0_1.current.x;
-        int end = line_0_2.current.x;
+// Either the top or bottom of the triangle must be flat (the lines must share the same start and end y position).
+void _llsr_raster_triangle_2d_flat(llsr_color_buffer_t* color_buffer, llsr_bresenham_line_t line_a, llsr_bresenham_line_t line_b, llsr_byte3_t color) {
+    for (int y = line_a.start.y; y <= line_a.end.y; y++) {
+        int start = line_a.current.x;
+        int end = line_b.current.x;
 
         if (start > end) {
             llsr_swap(&start, &end);
         }
-        for (int x = start; x <= end; ++x) {
-            // Check bounds, this could definitely be optimized.
+
+        for (int x = start; x <= end; x++) {
+            // TODO: find way to check bounds.
             if (x >= 0 && x < color_buffer->w && y >= 0 && y < color_buffer->h) {
                 *llsr_color_buffer_at(color_buffer, x, y) = color;
             }
         }
 
-        // Dirty switch line when line_0_1 reaches it's end.
-        if (!_llsr_bresenham_line_step_until_vertical_difference(&line_0_1)) {
-            line_0_1 = line_1_2;
-        }
-        _llsr_bresenham_line_step_until_vertical_difference(&line_0_2);
+        _llsr_bresenham_line_step_until_vertical_difference(&line_a);
+        _llsr_bresenham_line_step_until_vertical_difference(&line_b);
+    }
+}
+
+void llsr_raster_triangle_2d(llsr_color_buffer_t* color_buffer, llsr_int2_t pos0, llsr_int2_t pos1, llsr_int2_t pos2, llsr_byte3_t color) {
+    _llsr_sort_triangle_vertices_by_height(&pos0, &pos1, &pos2);
+
+    // Check if the top of the triangle is flat.
+    if (pos0.y == pos1.y) {
+        _llsr_raster_triangle_2d_flat(color_buffer, llsr_bresenham_line_create(pos0, pos2), llsr_bresenham_line_create(pos1, pos2), color);
+    }
+    // Check if the bottom is flat.
+    else if (pos1.y == pos2.y) {
+        _llsr_raster_triangle_2d_flat(color_buffer, llsr_bresenham_line_create(pos0, pos1), llsr_bresenham_line_create(pos0, pos2), color);
+    }
+    // Else plit triangle into two smaller triangles.
+    else {
+        llsr_int2_t pos3 = {(int)(pos0.x + ((float)(pos1.y - pos0.y) / (float)(pos2.y - pos0.y)) * (float)(pos2.x - pos0.x)), pos1.y};
+        _llsr_raster_triangle_2d_flat(color_buffer, llsr_bresenham_line_create(pos0, pos1), llsr_bresenham_line_create(pos0, pos3), color);
+        _llsr_raster_triangle_2d_flat(color_buffer, llsr_bresenham_line_create(pos3, pos2), llsr_bresenham_line_create(pos1, pos2), color);
     }
 }
 
