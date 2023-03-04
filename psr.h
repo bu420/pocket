@@ -1,3 +1,5 @@
+// psr (pocket software rasterizer) at https://github.com/bu420/psr
+
 #ifndef PSR_H
 #define PSR_H
 
@@ -139,11 +141,18 @@ psr_float4_t psr_float4_mul_matrix(psr_float4_t f, psr_matrix_t matrix);
 
 psr_matrix_t psr_look_at(psr_float3_t pos, psr_float3_t target, psr_float3_t up);
 psr_matrix_t psr_perspective(float aspect, float fov, float near, float far);
+// TODO: add orthographic projection.
 
+void psr_color_buffer_init(psr_color_buffer_t* color_buffer, int w, int h);
+void psr_color_buffer_free(psr_color_buffer_t* color_buffer);
 psr_byte3_t* psr_color_buffer_at(psr_color_buffer_t* color_buffer, int x, int y);
 void psr_color_buffer_clear(psr_color_buffer_t* color_buffer, psr_byte3_t color);
+
+void psr_depth_buffer_init(psr_depth_buffer_t* depth_buffer, int w, int h);
+void psr_depth_buffer_free(psr_depth_buffer_t* depth_buffer);
 float* psr_depth_buffer_at(psr_depth_buffer_t* depth_buffer, int x, int y);
 void psr_depth_buffer_clear(psr_depth_buffer_t* depth_buffer);
+
 psr_byte4_t* psr_texture_at(psr_texture_t* texture, int x, int y);
 psr_byte4_t psr_texture_sample(psr_texture_t texture, float u, float v);
 

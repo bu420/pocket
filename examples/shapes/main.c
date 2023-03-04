@@ -4,9 +4,7 @@
 
 int main() {
     psr_color_buffer_t canvas;
-    canvas.w = 100;
-    canvas.h = 100;
-    canvas.data = malloc(100 * 100 * sizeof(psr_byte3_t));
+    psr_color_buffer_init(&canvas, 100, 100);
     psr_color_buffer_clear(&canvas, (psr_byte3_t){0, 0, 0});
 
     psr_raster_line(&canvas, (psr_int2_t){10, 10}, (psr_int2_t){90, 90}, (psr_byte3_t){255, 0, 0}, (psr_byte3_t){0, 255, 0});
@@ -18,5 +16,6 @@ int main() {
     psr_raster_triangle_2d_color(&canvas, (psr_int2_t){20, 90}, (psr_int2_t){50, 60}, (psr_int2_t){80, 90}, (psr_byte3_t){255, 255, 0});
 
     psr_save_bmp("shapes.bmp", canvas);
+    psr_color_buffer_free(&canvas);
     printf("Done.\n");
 }

@@ -1,3 +1,5 @@
+// psr (pocket software rasterizer) at https://github.com/bu420/psr
+
 #include "psr.h"
 
 #include <stdlib.h>
@@ -257,6 +259,16 @@ psr_matrix_t psr_perspective(float aspect, float fov, float near, float far) {
     return m;
 }
 
+void psr_color_buffer_init(psr_color_buffer_t* color_buffer, int width, int height) {
+    color_buffer->w = width;
+    color_buffer->h = height;
+    color_buffer->data = malloc(width * height * sizeof(psr_byte3_t));
+}
+
+void psr_color_buffer_free(psr_color_buffer_t* color_buffer) {
+    free(color_buffer->data);
+}
+
 psr_byte3_t* psr_color_buffer_at(psr_color_buffer_t* color_buffer, int x, int y) {
     return &color_buffer->data[y * color_buffer->w + x];
 }
@@ -265,6 +277,16 @@ void psr_color_buffer_clear(psr_color_buffer_t* color_buffer, psr_byte3_t color)
     for (int i = 0; i < color_buffer->w * color_buffer->h; i++) {
         color_buffer->data[i] = color;
     }
+}
+
+void psr_depth_buffer_init(psr_depth_buffer_t* depth_buffer, int width, int height) {
+    depth_buffer->w = width;
+    depth_buffer->h = height;
+    depth_buffer->data = malloc(width * height * sizeof(float));
+}
+
+void psr_depth_buffer_free(psr_depth_buffer_t* depth_buffer) {
+    free(depth_buffer->data);
 }
 
 float* psr_depth_buffer_at(psr_depth_buffer_t* depth_buffer, int x, int y) {

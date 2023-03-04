@@ -11,7 +11,6 @@
 int main() {
     psr_mesh_t mesh;
     int result = psr_load_obj("bullfrog.obj", &mesh);
-
     if (result == 0) {
         printf("Failed to load model.\n");
         return -1;
@@ -22,26 +21,19 @@ int main() {
     }
 
     psr_color_buffer_t color_buffer;
-    color_buffer.w = WIDTH;
-    color_buffer.h = HEIGHT;
-    color_buffer.data = malloc(WIDTH * HEIGHT * sizeof(psr_byte3_t));
+    psr_color_buffer_init(&color_buffer, WIDTH, HEIGHT);
 
     psr_depth_buffer_t depth_buffer;
-    depth_buffer.w = WIDTH;
-    depth_buffer.h = HEIGHT;
-    depth_buffer.data = malloc(WIDTH * HEIGHT * sizeof(float));
+    psr_depth_buffer_init(&depth_buffer, WIDTH, HEIGHT);
     psr_depth_buffer_clear(&depth_buffer);
 
     // Gradient background.
     for (int y = 0; y < HEIGHT; y++) {
-        psr_byte3_t top = {141, 160, 184};
-        psr_byte3_t bottom = {20, 20, 20};
-
-        float amount = (float)y / HEIGHT;
-        psr_byte3_t interp = {(bottom.r - top.r) * amount + top.r, (bottom.g - top.g) * amount + top.g, (bottom.b - top.b) * amount + top.b};
+        static psr_byte3_t top = {141, 160, 184};
+        static psr_byte3_t bottom = {20, 20, 20};
 
         for (int x = 0; x < WIDTH; x++) {
-            *psr_color_buffer_at(&color_buffer, x, y) = interp;
+            *psr_color_buffer_at(&color_buffer, x, y) = psr_byte3_lerp(top, bottom, (float)y / HEIGHT);
         }
     }
 
