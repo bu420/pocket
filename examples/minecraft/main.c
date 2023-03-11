@@ -1,5 +1,5 @@
 #include <psr.h>
-#include <SDL2/SDL.h>
+#include <pwa.h>
 #define _USE_MATH_DEFINES
 #include <math.h>
 
@@ -28,7 +28,13 @@ int lvl_idx(int x, int y, int z) {
     return z * 256 + y * 16 + x;
 }
 
+pwa_pixel_buffer_t on_draw(void* user_data) {
+    return *(pwa_pixel_buffer_t*)user_data;
+}
+
 int main(int argc, char** argv) {
+    pwa_init();
+
     psr_color_buffer_t color_buffer;
     psr_color_buffer_init(&color_buffer, WIDTH, HEIGHT);
 
@@ -44,18 +50,16 @@ int main(int argc, char** argv) {
     psr_float3_t pos = {-32, -24, -32};
     psr_matrix_t projection = psr_perspective(HEIGHT / (float)WIDTH, 70 * (M_PI / 180), .1f, 1000.f);
 
-    SDL_Init(SDL_INIT_EVERYTHING);
-    SDL_Window* window = SDL_CreateWindow("Minecraft", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WIDTH, HEIGHT, 0);
-    SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, 0);
+    pwa_pixel_buffer_t buffer;
+    buffer.pixels = malloc(WIDTH * HEIGHT * sizeof(uint32_t));
+    buffer.w = WIDTH;
+    buffer.h = HEIGHT;
 
-    while (1) {
-        SDL_Event e;
-        while (SDL_PollEvent(&e)) {
-            switch (e.type) {
-            case SDL_QUIT:
-                return 0;
-            }
-        }
+    pwa_window_t* window = pwa_window_create("Minecraft", WIDTH, HEIGHT, &buffer);
+    pwa_window_set_draw_callback(window, on_draw);
+
+    while (!pwa_window_should_close(window)) {
+        pwa_window_poll_events(window);
 
         psr_matrix_t view = psr_look_at(pos, (psr_float3_t){0, 0, 0}, (psr_float3_t){0, 1, 0});
 
@@ -108,16 +112,16 @@ int main(int argc, char** argv) {
             }
         }
 
-        SDL_RenderClear(renderer);
-
+        // Copy color buffer to window buffer.
         for (int x = 0; x < WIDTH; x++) {
             for (int y = 0; y < HEIGHT; y++) {
-                psr_byte3_t* pixel = psr_color_buffer_at(&color_buffer, x, y);
-                SDL_SetRenderDrawColor(renderer, pixel->r, pixel->g, pixel->b, 255);
-                SDL_RenderDrawPoint(renderer, x, y);
+                psr_byte3_t color = *psr_color_buffer_at(&color_buffer, x, y);
+                uint32_t* pixel = &buffer.pixels[y * WIDTH + x];
+                
+                *pixel = (*pixel & 0xffff00) | (color.b << 0);
+                *pixel = (*pixel & 0xff00ff) | (color.g << 8);
+                *pixel = (*pixel & 0x00ffff) | (color.r << 16);
             }
         }
-
-        SDL_RenderPresent(renderer);
     }
 }
