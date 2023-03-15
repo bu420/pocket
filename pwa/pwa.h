@@ -6,6 +6,7 @@
 typedef struct pwa_window pwa_window_t;
 
 typedef struct {
+    // Row-major array of packed RGB values.
     uint32_t* pixels;
     int w;
     int h;
@@ -21,5 +22,6 @@ void pwa_window_set_resize_callback(pwa_window_t* window, pwa_resize_callback on
 void pwa_window_set_draw_callback(pwa_window_t* window, pwa_draw_callback on_draw);
 int pwa_window_should_close(pwa_window_t* window);
 void pwa_window_poll_events(pwa_window_t* window);
+void pwa_window_schedule_redraw(pwa_window_t* window);
 
 #endif

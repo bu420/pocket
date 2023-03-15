@@ -7,32 +7,25 @@ pwa_pixel_buffer_t create_pixel_buffer(int w, int h) {
     buffer.pixels = malloc(w * h * sizeof(uint32_t));
     buffer.w = w;
     buffer.h = h;
-    
-    for (int x = 0; x < w; x++) {
-        for (int y = 0; y < h / 2; y++) {
-            buffer.pixels[y * w + x] = 0xff0000;
-        }
-        for (int y = h / 2; y < h; y++) {
-            buffer.pixels[y * w + x] = 0x0000ff;
-        }
-    }
-    for (int x = w / 2 - w / 8; x < w / 2 + w / 8; x++) {
-        for (int y = 0; y < h; y++) {
-            buffer.pixels[y * w + x] = 0x00ff00;
-        }
-    }
-    return buffer;
-}
 
-void free_pixel_buffer(pwa_pixel_buffer_t* pixel_buffer) {
-    free(pixel_buffer->pixels);
-    pixel_buffer->pixels = NULL;
+    // Gradient.
+    for (int x = 0; x < w; x++) {
+        for (int y = 0; y < h; y++) {
+            unsigned char r = (int)(x / (float)w * 255);
+            unsigned char g = (int)(y / (float)h * 255);
+            unsigned char b = 255 - (int)(y / (float)h * 255);
+
+            buffer.pixels[y * w + x] = (r << 16) | (g << 8) | (b);
+        }
+    }
+    
+    return buffer;
 }
 
 void on_resize(int w, int h, void* user_data) {
     pwa_pixel_buffer_t* buffer = (pwa_pixel_buffer_t*)user_data;
 
-    free_pixel_buffer(buffer);
+    free(buffer->pixels);
     *buffer = create_pixel_buffer(w, h);
 }
 
@@ -57,6 +50,7 @@ int main() {
 
     while (!pwa_window_should_close(window)) {
         pwa_window_poll_events(window);
+        pwa_window_schedule_redraw(window);
     }
 
     pwa_window_destroy(window);

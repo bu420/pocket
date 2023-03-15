@@ -68,26 +68,18 @@ void pwa_window_poll_events(pwa_window_t* window) {
     }
 }
 
-void _pwa_window_close_request(pwa_window_t* window) {
-    if (window) {
-        window->should_close = 1;
-    }
+void pwa_window_schedule_redraw(pwa_window_t* window) {
+    InvalidateRect(window->hwnd, NULL, FALSE);
 }
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     pwa_window_t* window = GetProp(hwnd, PWA_WINDOW_PROP_NAME);
     
     switch (uMsg) {
-    case WM_CREATE:
-        SetTimer(hwnd, 1, 16, NULL);
-        return 0;
-
-    case WM_TIMER:
-        InvalidateRect(hwnd, NULL, FALSE);
-        return 0;
-
     case WM_CLOSE:
-        _pwa_window_close_request(window);
+        if (window) {
+            window->should_close = 1;
+        }
         return 0;
 
     case WM_PAINT:
