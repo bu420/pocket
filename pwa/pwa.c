@@ -50,19 +50,19 @@ void pwa_window_destroy(pwa_window_t* window) {
     window = NULL;
 }
 
-void pwa_set_resize_callback(pwa_window_t* window, pwa_resize_callback on_resize) {
+void pwa_window_set_resize_callback(pwa_window_t* window, pwa_resize_callback on_resize) {
     window->on_resize = on_resize;
 }
 
-void pwa_set_draw_callback(pwa_window_t* window, pwa_draw_callback on_draw) {
+void pwa_window_set_draw_callback(pwa_window_t* window, pwa_draw_callback on_draw) {
     window->on_draw = on_draw;
 }
 
-void pwa_set_key_down_callback(pwa_window_t* window, pwa_key_down_callback on_key_down) {
+void pwa_window_set_key_down_callback(pwa_window_t* window, pwa_key_down_callback on_key_down) {
     window->on_key_down = on_key_down;
 }
 
-void pwa_set_key_up_callback(pwa_window_t* window, pwa_key_up_callback on_key_up) {
+void pwa_window_set_key_up_callback(pwa_window_t* window, pwa_key_up_callback on_key_up) {
     window->on_key_up = on_key_up;
 }
 
@@ -70,7 +70,7 @@ int pwa_window_should_close(pwa_window_t* window) {
     return window->should_close;
 }
 
-void pwa_poll_events(pwa_window_t* window) {
+void pwa_window_poll_events(pwa_window_t* window) {
     MSG msg;
     while (PeekMessage(&msg, window->hwnd, 0, 0, PM_REMOVE)) {
         TranslateMessage(&msg);
@@ -78,57 +78,78 @@ void pwa_poll_events(pwa_window_t* window) {
     }
 }
 
-void pwa_schedule_redraw(pwa_window_t* window) {
+void pwa_window_schedule_redraw(pwa_window_t* window) {
     InvalidateRect(window->hwnd, NULL, FALSE);
+}
+
+double pwa_get_elapsed_time_ms() {
+    LARGE_INTEGER elapsed_time;
+    QueryPerformanceCounter(&elapsed_time);
+    return elapsed_time.QuadPart * 1000. / pwa_get_ticks_per_second();
+}
+
+int64_t pwa_get_ticks_per_second() {
+    LARGE_INTEGER ticks_per_second;
+    QueryPerformanceFrequency(&ticks_per_second);
+    return ticks_per_second.QuadPart;
+}
+
+void pwa_terminate() {
 }
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     pwa_window_t* window = GetProp(hwnd, PWA_WINDOW_PROP_NAME);
     
-    switch (uMsg) {
-    case WM_CLOSE:
-        if (window) {
-            window->should_close = 1;
+    if (window) {
+        switch (uMsg) {
+        case WM_CLOSE:
+            if (window) {
+                window->should_close = 1;
+            }
+            return 0;
+
+        case WM_PAINT:
+            PAINTSTRUCT ps;
+            HDC hdc = BeginPaint(hwnd, &ps);
+            
+            if (window->on_draw) {
+                pwa_pixel_buffer_t buffer = window->on_draw(window->user_data);
+
+                BITMAPINFO bmi = {0};
+                bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+                bmi.bmiHeader.biWidth = buffer.w;
+                bmi.bmiHeader.biHeight = -buffer.h;
+                bmi.bmiHeader.biPlanes = 1;
+                bmi.bmiHeader.biBitCount = 32;
+                bmi.bmiHeader.biCompression = BI_RGB;
+
+                StretchDIBits(hdc, 0, 0, buffer.w, buffer.h, 0, 0, buffer.w, buffer.h, buffer.pixels, &bmi, DIB_RGB_COLORS, SRCCOPY);
+            }
+            else {
+                FillRect(hdc, &ps.rcPaint, (HBRUSH)(COLOR_WINDOW + 1));
+            }
+
+            EndPaint(hwnd, &ps);
+            return 0;
+
+        case WM_SIZE:
+            if (window->on_resize) {
+                window->on_resize(LOWORD(lParam), HIWORD(lParam), window->user_data);
+            }
+            return 0;
+
+        case WM_KEYDOWN:
+            if (window->on_key_down) {
+                window->on_key_down(wParam, window->user_data);
+            }
+            return 0;
+
+        case WM_KEYUP:
+            if (window->on_key_up) {
+                window->on_key_up(wParam, window->user_data);
+            }
+            return 0;
         }
-        return 0;
-
-    case WM_PAINT:
-        PAINTSTRUCT ps;
-        HDC hdc = BeginPaint(hwnd, &ps);
-        
-        if (window->on_draw) {
-            pwa_pixel_buffer_t buffer = window->on_draw(window->user_data);
-
-            BITMAPINFO bmi = {0};
-            bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-            bmi.bmiHeader.biWidth = buffer.w;
-            bmi.bmiHeader.biHeight = -buffer.h;
-            bmi.bmiHeader.biPlanes = 1;
-            bmi.bmiHeader.biBitCount = 32;
-            bmi.bmiHeader.biCompression = BI_RGB;
-
-            StretchDIBits(hdc, 0, 0, buffer.w, buffer.h, 0, 0, buffer.w, buffer.h, buffer.pixels, &bmi, DIB_RGB_COLORS, SRCCOPY);
-        }
-        else {
-            FillRect(hdc, &ps.rcPaint, (HBRUSH)(COLOR_WINDOW + 1));
-        }
-
-        EndPaint(hwnd, &ps);
-        return 0;
-
-    case WM_SIZE:
-        if (window->on_resize) {
-            window->on_resize(LOWORD(lParam), HIWORD(lParam), window->user_data);
-        }
-        return 0;
-
-    case WM_KEYDOWN:
-        window->on_key_down(wParam, window->user_data);
-        return 0;
-
-    case WM_KEYUP:
-        window->on_key_up(wParam, window->user_data);
-        return 0;
     }
 
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
