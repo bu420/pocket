@@ -11,6 +11,8 @@ struct pwa_window {
     int should_close;
     pwa_resize_callback on_resize;
     pwa_draw_callback on_draw;
+    pwa_key_down_callback on_key_down;
+    pwa_key_up_callback on_key_up;
     void* user_data;
 };
 
@@ -48,19 +50,27 @@ void pwa_window_destroy(pwa_window_t* window) {
     window = NULL;
 }
 
-void pwa_window_set_resize_callback(pwa_window_t* window, pwa_resize_callback on_resize) {
+void pwa_set_resize_callback(pwa_window_t* window, pwa_resize_callback on_resize) {
     window->on_resize = on_resize;
 }
 
-void pwa_window_set_draw_callback(pwa_window_t* window, pwa_draw_callback on_draw) {
+void pwa_set_draw_callback(pwa_window_t* window, pwa_draw_callback on_draw) {
     window->on_draw = on_draw;
+}
+
+void pwa_set_key_down_callback(pwa_window_t* window, pwa_key_down_callback on_key_down) {
+    window->on_key_down = on_key_down;
+}
+
+void pwa_set_key_up_callback(pwa_window_t* window, pwa_key_up_callback on_key_up) {
+    window->on_key_up = on_key_up;
 }
 
 int pwa_window_should_close(pwa_window_t* window) {
     return window->should_close;
 }
 
-void pwa_window_poll_events(pwa_window_t* window) {
+void pwa_poll_events(pwa_window_t* window) {
     MSG msg;
     while (PeekMessage(&msg, window->hwnd, 0, 0, PM_REMOVE)) {
         TranslateMessage(&msg);
@@ -68,7 +78,7 @@ void pwa_window_poll_events(pwa_window_t* window) {
     }
 }
 
-void pwa_window_schedule_redraw(pwa_window_t* window) {
+void pwa_schedule_redraw(pwa_window_t* window) {
     InvalidateRect(window->hwnd, NULL, FALSE);
 }
 
@@ -110,6 +120,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         if (window->on_resize) {
             window->on_resize(LOWORD(lParam), HIWORD(lParam), window->user_data);
         }
+        return 0;
+
+    case WM_KEYDOWN:
+        window->on_key_down(wParam, window->user_data);
+        return 0;
+
+    case WM_KEYUP:
+        window->on_key_up(wParam, window->user_data);
         return 0;
     }
 
