@@ -32,6 +32,8 @@ void pwa_window_schedule_redraw(pwa_window_t* window);
 double pwa_get_elapsed_time_ms();
 int64_t pwa_get_ticks_per_second();
 
+void pwa_print_last_error();
+
 void pwa_terminate();
 
 #endif

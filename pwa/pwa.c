@@ -2,9 +2,9 @@
 
 #include <windows.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #define PWA_WINDOW_CLASS_NAME "PWA Window Class"
-#define PWA_WINDOW_PROP_NAME "PWA Prop"
 
 struct pwa_window {
     HWND hwnd;
@@ -23,6 +23,8 @@ void pwa_init() {
     wc.lpfnWndProc = WindowProc;
     wc.hInstance = GetModuleHandle(0);
     wc.lpszClassName = PWA_WINDOW_CLASS_NAME;
+    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+    wc.cbWndExtra = sizeof(pwa_window_t*);
     RegisterClass(&wc);
 }
 
@@ -37,8 +39,14 @@ pwa_window_t* pwa_window_create(char* title, int w, int h, void* user_data) {
     pwa_window_t* window = malloc(sizeof(pwa_window_t));
     window->hwnd = hwnd;
     window->should_close = 0;
+    window->on_resize = NULL;
+    window->on_draw = NULL;
+    window->on_key_down = NULL;
+    window->on_key_up = NULL;
     window->user_data = user_data;
-    SetProp(hwnd, PWA_WINDOW_PROP_NAME, window);
+    SetWindowLongPtr(hwnd, 0, (LONG_PTR)window);
+
+    pwa_print_last_error();
 
     ShowWindow(hwnd, SW_SHOW);
 
@@ -94,62 +102,76 @@ int64_t pwa_get_ticks_per_second() {
     return ticks_per_second.QuadPart;
 }
 
+void pwa_print_last_error() {
+    static int counter = 0;
+    
+    DWORD id = GetLastError();
+    if (id == 0) {
+        return;
+    }
+
+    LPSTR message = NULL;
+    FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, id, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPSTR)&message, 0, NULL);
+    printf("(%d) Win32 Error: %s\n", counter, message);
+    LocalFree(message);
+
+    counter++;
+}
+
 void pwa_terminate() {
 }
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    pwa_window_t* window = GetProp(hwnd, PWA_WINDOW_PROP_NAME);
+    pwa_window_t* window = (pwa_window_t*)GetWindowLongPtr(hwnd, 0);
     
-    if (window) {
-        switch (uMsg) {
-        case WM_CLOSE:
-            if (window) {
-                window->should_close = 1;
-            }
-            return 0;
-
-        case WM_PAINT:
-            PAINTSTRUCT ps;
-            HDC hdc = BeginPaint(hwnd, &ps);
-            
-            if (window->on_draw) {
-                pwa_pixel_buffer_t buffer = window->on_draw(window->user_data);
-
-                BITMAPINFO bmi = {0};
-                bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-                bmi.bmiHeader.biWidth = buffer.w;
-                bmi.bmiHeader.biHeight = -buffer.h;
-                bmi.bmiHeader.biPlanes = 1;
-                bmi.bmiHeader.biBitCount = 32;
-                bmi.bmiHeader.biCompression = BI_RGB;
-
-                StretchDIBits(hdc, 0, 0, buffer.w, buffer.h, 0, 0, buffer.w, buffer.h, buffer.pixels, &bmi, DIB_RGB_COLORS, SRCCOPY);
-            }
-            else {
-                FillRect(hdc, &ps.rcPaint, (HBRUSH)(COLOR_WINDOW + 1));
-            }
-
-            EndPaint(hwnd, &ps);
-            return 0;
-
-        case WM_SIZE:
-            if (window->on_resize) {
-                window->on_resize(LOWORD(lParam), HIWORD(lParam), window->user_data);
-            }
-            return 0;
-
-        case WM_KEYDOWN:
-            if (window->on_key_down) {
-                window->on_key_down(wParam, window->user_data);
-            }
-            return 0;
-
-        case WM_KEYUP:
-            if (window->on_key_up) {
-                window->on_key_up(wParam, window->user_data);
-            }
-            return 0;
+    switch (uMsg) {
+    case WM_CLOSE:
+        if (window) {
+            window->should_close = 1;
         }
+        return 0;
+
+    case WM_PAINT:
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hwnd, &ps);
+        
+        if (window && window->on_draw) {
+            pwa_pixel_buffer_t buffer = window->on_draw(window->user_data);
+
+            BITMAPINFO bmi = {0};
+            bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+            bmi.bmiHeader.biWidth = buffer.w;
+            bmi.bmiHeader.biHeight = -buffer.h;
+            bmi.bmiHeader.biPlanes = 1;
+            bmi.bmiHeader.biBitCount = 32;
+            bmi.bmiHeader.biCompression = BI_RGB;
+
+            StretchDIBits(hdc, 0, 0, buffer.w, buffer.h, 0, 0, buffer.w, buffer.h, buffer.pixels, &bmi, DIB_RGB_COLORS, SRCCOPY);
+        }
+        else {
+            FillRect(hdc, &ps.rcPaint, (HBRUSH)(COLOR_WINDOW + 1));
+        }
+
+        EndPaint(hwnd, &ps);
+        return 0;
+
+    case WM_SIZE:
+        if (window && window->on_resize) {
+            window->on_resize(LOWORD(lParam), HIWORD(lParam), window->user_data);
+        }
+        return 0;
+
+    case WM_KEYDOWN:
+        if (window && window->on_key_down) {
+            window->on_key_down(wParam, window->user_data);
+        }
+        return 0;
+
+    case WM_KEYUP:
+        if (window && window->on_key_up) {
+            window->on_key_up(wParam, window->user_data);
+        }
+        return 0;
     }
 
     return DefWindowProc(hwnd, uMsg, wParam, lParam);

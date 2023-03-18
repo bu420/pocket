@@ -28,8 +28,8 @@ int main() {
     psr_color_buffer_t color_buffer;
     psr_color_buffer_init(&color_buffer, WIDTH, HEIGHT);
 
-    psr_depth_buffer_t depth_buffer;
-    psr_depth_buffer_init(&depth_buffer, WIDTH, HEIGHT);
+    /*psr_depth_buffer_t depth_buffer;
+    psr_depth_buffer_init(&depth_buffer, WIDTH, HEIGHT);*/
 
     pwa_pixel_buffer_t pixel_buffer;
     pixel_buffer.pixels = malloc(WIDTH * HEIGHT * sizeof(uint32_t));
@@ -49,7 +49,7 @@ int main() {
     while (!pwa_window_should_close(window)) {
         pwa_window_poll_events(window);
 
-        psr_depth_buffer_clear(&depth_buffer);
+        //psr_depth_buffer_clear(&depth_buffer);
 
         // Gradient background.
         for (int y = 0; y < HEIGHT; y++) {
@@ -65,21 +65,28 @@ int main() {
         psr_matrix_t view = psr_look_at(camera_pos, (psr_float3_t){0, 0, 0}, (psr_float3_t){0, -1, 0});
         psr_matrix_t projection = psr_perspective(HEIGHT / (float)WIDTH, 75.f * (M_PI / 180), 0.1f, 1000.f);
 
+        float spin_animation = pwa_get_elapsed_time_ms() * M_PI / 1000;
+
         psr_matrix_t model;
         psr_matrix_init_identity(&model);
         model = psr_matrix_translate(model, (psr_float3_t){-.5, -.5, -.5});
         model = psr_matrix_rotate_x(model, 90.f * (M_PI / 180));
         model = psr_matrix_rotate_y(model, 180.f * (M_PI / 180));
+        model = psr_matrix_rotate_y(model, spin_animation);
 
         psr_matrix_t mvp = psr_matrix_mul(psr_matrix_mul(model, view), projection);
 
+        // Copy positions from mesh to preserve original.
+        psr_float3_t* positions = malloc(mesh.position_count * sizeof(psr_float3_t));
+        memcpy(positions, mesh.positions, mesh.position_count * sizeof(psr_float3_t));
+
         // Vertex multiplication and scale to viewport.
         for (int i = 0; i < mesh.position_count; i++) {
-            mesh.positions[i] = psr_float3_mul_matrix(mesh.positions[i], mvp);
+            positions[i] = psr_float3_mul_matrix(positions[i], mvp);
 
             // Scale from [-1, 1] to viewport size.
-            mesh.positions[i].x = (mesh.positions[i].x + 1) / 2.f * WIDTH;
-            mesh.positions[i].y = (mesh.positions[i].y + 1) / 2.f * HEIGHT;
+            positions[i].x = (positions[i].x + 1) / 2.f * WIDTH;
+            positions[i].y = (positions[i].y + 1) / 2.f * HEIGHT;
         }
 
         // Render triangles.
@@ -92,11 +99,13 @@ int main() {
 
             psr_int2_t tri[3];
             for (int j = 0; j < 3; j++) {
-                tri[j].x = (int)roundf(mesh.positions[mesh.faces[i].position_indices[j]].x);
-                tri[j].y = (int)roundf(mesh.positions[mesh.faces[i].position_indices[j]].y);
+                tri[j].x = (int)roundf(positions[mesh.faces[i].position_indices[j]].x);
+                tri[j].y = (int)roundf(positions[mesh.faces[i].position_indices[j]].y);
             }
             psr_raster_triangle_2d_color(&color_buffer, tri[0], tri[1], tri[2], color);
         }
+
+        free(positions);
 
         // Copy color buffer into pixel buffer.
         for (int x = 0; x < WIDTH; x++) {
@@ -107,9 +116,9 @@ int main() {
         }
 
         pwa_window_schedule_redraw(window);
+        pwa_print_last_error();
     }
 
     pwa_window_destroy(window);
-
     printf("Done.");
 }
