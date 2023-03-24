@@ -1,5 +1,3 @@
-// psr (pocket software rasterizer) at https://github.com/bu420/psr
-
 #ifndef PSR_H
 #define PSR_H
 
@@ -72,8 +70,18 @@ typedef union {
 } psr_float4_t;
 
 typedef struct {
+    float m[3][3];
+    struct {
+        float m00, m10, m20, m01, m11, m21, m02, m12, m22;
+    };
+} psr_mat3_t;
+
+typedef union {
     float m[4][4];
-} psr_matrix_t;
+    struct {
+        float m00, m10, m20, m30, m01, m11, m21, m31, m02, m12, m22, m32, m03, m13, m23, m33;
+    };
+} psr_mat4_t;
 
 typedef struct {
     int w, h;
@@ -89,15 +97,6 @@ typedef struct {
     int w, h;
     psr_byte4_t* data;
 } psr_texture_t;
-
-typedef struct {
-    psr_int2_t start;
-    psr_int2_t end;
-    psr_int2_t current;
-    psr_int2_t delta;
-    psr_int2_t dir;
-    int deviation;
-} psr_bresenham_line_t;
 
 typedef struct {
     int position_indices[3];
@@ -126,39 +125,53 @@ void psr_float2_swap(psr_float2_t* a, psr_float2_t* b);
 void psr_float3_swap(psr_float3_t* a, psr_float3_t* b);
 psr_byte3_t psr_byte3_lerp(psr_byte3_t a, psr_byte3_t b, float amount);
 
-void psr_matrix_init_zero(psr_matrix_t* matrix);
-void psr_matrix_init_identity(psr_matrix_t* matrix);
-psr_matrix_t psr_matrix_mul(psr_matrix_t a, psr_matrix_t b);
-psr_matrix_t psr_matrix_translate(psr_matrix_t matrix, psr_float3_t f);
-psr_matrix_t psr_matrix_rotate_x(psr_matrix_t matrix, float a);
-psr_matrix_t psr_matrix_rotate_y(psr_matrix_t matrix, float a);
-psr_matrix_t psr_matrix_rotate_z(psr_matrix_t matrix, float a);
-psr_matrix_t psr_matrix_scale(psr_matrix_t matrix, psr_float3_t f);
-psr_float3_t psr_matrix_mul_float3(psr_matrix_t matrix, psr_float3_t f);
-psr_float4_t psr_matrix_mul_float4(psr_matrix_t matrix, psr_float4_t f);
-psr_float3_t psr_float3_mul_matrix(psr_float3_t f, psr_matrix_t matrix);
-psr_float4_t psr_float4_mul_matrix(psr_float4_t f, psr_matrix_t matrix);
+psr_float3_t psr_float3_add(psr_float3_t a, psr_float3_t b);
+psr_float3_t psr_float3_sub(psr_float3_t a, psr_float3_t b);
+psr_float3_t psr_float3_mul(psr_float3_t a, psr_float3_t b);
+psr_float3_t psr_float3_div(psr_float3_t a, psr_float3_t b);
 
-psr_matrix_t psr_look_at(psr_float3_t pos, psr_float3_t target, psr_float3_t up);
-psr_matrix_t psr_perspective(float aspect, float fov, float near, float far);
+// Matrix.
+
+void psr_mat4_init_zero(psr_mat4_t* m);
+void psr_mat4_init_identity(psr_mat4_t* m);
+psr_mat4_t psr_mat4_mul(psr_mat4_t a, psr_mat4_t b);
+psr_mat4_t psr_mat4_transpose(psr_mat4_t m);
+psr_mat4_t psr_mat4_inverse(psr_mat4_t m);
+psr_mat4_t psr_mat4_translate(psr_mat4_t mat4, psr_float3_t f);
+psr_mat4_t psr_mat4_rotate_x(psr_mat4_t mat4, float a);
+psr_mat4_t psr_mat4_rotate_y(psr_mat4_t mat4, float a);
+psr_mat4_t psr_mat4_rotate_z(psr_mat4_t mat4, float a);
+psr_mat4_t psr_mat4_scale(psr_mat4_t mat4, psr_float3_t f);
+psr_float3_t psr_mat3_mul_float3(psr_mat3_t m, psr_float3_t f);
+psr_float3_t psr_float3_mul_mat3(psr_float3_t f, psr_mat3_t m);
+psr_float3_t psr_mat4_mul_float3(psr_mat4_t m, psr_float3_t f);
+psr_float4_t psr_mat4_mul_float4(psr_mat4_t m, psr_float4_t f);
+psr_float3_t psr_float3_mul_mat4(psr_float3_t f, psr_mat4_t m);
+psr_float4_t psr_float4_mul_mat4(psr_float4_t f, psr_mat4_t m);
+psr_mat3_t psr_mat4_to_mat3(psr_mat4_t m);
+
+psr_mat4_t psr_look_at(psr_float3_t pos, psr_float3_t target, psr_float3_t up);
+psr_mat4_t psr_perspective(float aspect, float fov, float near, float far);
 // TODO: add orthographic projection.
+
+// Buffer.
 
 void psr_color_buffer_init(psr_color_buffer_t* color_buffer, int w, int h);
 void psr_color_buffer_free(psr_color_buffer_t* color_buffer);
 psr_byte3_t* psr_color_buffer_at(psr_color_buffer_t* color_buffer, int x, int y);
 void psr_color_buffer_clear(psr_color_buffer_t* color_buffer, psr_byte3_t color);
-
 void psr_depth_buffer_init(psr_depth_buffer_t* depth_buffer, int w, int h);
 void psr_depth_buffer_free(psr_depth_buffer_t* depth_buffer);
 float* psr_depth_buffer_at(psr_depth_buffer_t* depth_buffer, int x, int y);
 void psr_depth_buffer_clear(psr_depth_buffer_t* depth_buffer);
 
+// Texture.
+
 psr_byte4_t* psr_texture_at(psr_texture_t* texture, int x, int y);
 psr_byte4_t psr_texture_sample(psr_texture_t texture, float u, float v);
 
-psr_bresenham_line_t psr_bresenham_line_create(psr_int2_t start, psr_int2_t end);
-// @return true while it has not yet reached it's end position.
-int psr_bresenham_line_step(psr_bresenham_line_t* line);
+// Raster.
+
 void psr_raster_line(psr_color_buffer_t* color_buffer, psr_int2_t start, psr_int2_t end, psr_byte3_t start_color, psr_byte3_t end_color);
 
 void psr_raster_triangle_2d_color(psr_color_buffer_t* color_buffer, psr_int2_t pos0, psr_int2_t pos1, psr_int2_t pos2, psr_byte3_t color);
@@ -167,10 +180,12 @@ void psr_raster_triangle_2d_callback(psr_color_buffer_t* color_buffer, psr_int2_
 
 void psr_raster_triangle_3d(psr_color_buffer_t* color_buffer, psr_depth_buffer_t* depth_buffer, psr_float3_t pos0, psr_float3_t pos1, psr_float3_t pos2, psr_byte3_t color);
 
-void psr_save_bmp(char const* filename, psr_color_buffer_t color_buffer);
+// Asset I/O.
+
+void psr_save_bmp(char* path, psr_color_buffer_t color_buffer);
 // Very basic OBJ loader.
 // @return 0 on failure to open file and -1 on bad model.
-int psr_load_obj(char const* filename, psr_mesh_t* mesh);
+int psr_load_obj(char* path, psr_mesh_t* mesh);
 void psr_mesh_free(psr_mesh_t* mesh);
 
 #endif

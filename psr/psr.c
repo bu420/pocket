@@ -1,11 +1,30 @@
-// psr (pocket software rasterizer) at https://github.com/bu420/psr
-
 #include "psr.h"
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#include <assert.h>
+
+typedef struct {
+    psr_int2_t start;
+    psr_int2_t end;
+    psr_int2_t current;
+    psr_int2_t delta;
+    psr_int2_t dir;
+    int deviation;
+} psr_line_2d_t;
+
+typedef struct {
+    struct {
+        int x;
+        int y;
+        float z;
+    } start, end, current;
+    psr_int2_t delta;
+    psr_int2_t dir;
+    int deviation;
+} psr_line_3d_t;
 
 psr_float3_t psr_normalize(psr_float3_t f) {
     float len = sqrtf(f.x * f.x + f.y * f.y + f.z * f.z);
@@ -62,24 +81,40 @@ psr_byte3_t psr_byte3_lerp(psr_byte3_t a, psr_byte3_t b, float amount) {
     return result;
 }
 
-void psr_matrix_init_zero(psr_matrix_t* matrix) {
+psr_float3_t psr_float3_add(psr_float3_t a, psr_float3_t b) {
+    return (psr_float3_t){a.x + b.x, a.y + b.y, a.z + b.z};
+}
+
+psr_float3_t psr_float3_sub(psr_float3_t a, psr_float3_t b) {
+    return (psr_float3_t){a.x - b.x, a.y - b.y, a.z - b.z};
+}
+
+psr_float3_t psr_float3_mul(psr_float3_t a, psr_float3_t b) {
+    return (psr_float3_t){a.x * b.x, a.y * b.y, a.z * b.z};
+}
+
+psr_float3_t psr_float3_div(psr_float3_t a, psr_float3_t b) {
+    return (psr_float3_t){a.x / b.x, a.y / b.y, a.z / b.z};
+}
+
+void psr_mat4_init_zero(psr_mat4_t* m) {
     for (int x = 0; x < 4; x++) {
         for (int y = 0; y < 4; y++) {
-            matrix->m[x][y] = 0;
+            m->m[x][y] = 0;
         }
     }
 }
 
-void psr_matrix_init_identity(psr_matrix_t* matrix) {
-    psr_matrix_init_zero(matrix);
+void psr_mat4_init_identity(psr_mat4_t* m) {
+    psr_mat4_init_zero(m);
     for (int i = 0; i < 4; i++) {
-        matrix->m[i][i] = 1;
+        m->m[i][i] = 1;
     }
 }
 
-psr_matrix_t psr_matrix_mul(psr_matrix_t a, psr_matrix_t b) {
-    psr_matrix_t result;
-    psr_matrix_init_zero(&result);
+psr_mat4_t psr_mat4_mul(psr_mat4_t a, psr_mat4_t b) {
+    psr_mat4_t result;
+    psr_mat4_init_zero(&result);
 
     for (int x = 0; x < 4; x++) {
         for (int y = 0; y < 4; y++) {
@@ -91,113 +126,165 @@ psr_matrix_t psr_matrix_mul(psr_matrix_t a, psr_matrix_t b) {
     return result;
 }
 
-psr_matrix_t psr_matrix_translate(psr_matrix_t matrix, psr_float3_t f) {
-    psr_matrix_t m;
-    psr_matrix_init_identity(&m);
+psr_mat4_t psr_mat4_transpose(psr_mat4_t m) {
+    psr_mat4_t r;
+    for (int x = 0; x < 4; x++) {
+        for (int y = 0; y < 4; y++) {
+            r.m[y][x] = m.m[x][y];
+        }
+    }
+    return r;
+}
+
+psr_mat4_t psr_mat4_inverse(psr_mat4_t m) {
+    float A2323 = m.m22 * m.m33 - m.m23 * m.m32;
+    float A1323 = m.m21 * m.m33 - m.m23 * m.m31;
+    float A1223 = m.m21 * m.m32 - m.m22 * m.m31;
+    float A0323 = m.m20 * m.m33 - m.m23 * m.m30;
+    float A0223 = m.m20 * m.m32 - m.m22 * m.m30;
+    float A0123 = m.m20 * m.m31 - m.m21 * m.m30;
+    float A2313 = m.m12 * m.m33 - m.m13 * m.m32;
+    float A1313 = m.m11 * m.m33 - m.m13 * m.m31; 
+    float A1213 = m.m11 * m.m32 - m.m12 * m.m31;
+    float A2312 = m.m12 * m.m23 - m.m13 * m.m22;
+    float A1312 = m.m11 * m.m23 - m.m13 * m.m21;
+    float A1212 = m.m11 * m.m22 - m.m12 * m.m21;
+    float A0313 = m.m10 * m.m33 - m.m13 * m.m30;
+    float A0213 = m.m10 * m.m32 - m.m12 * m.m30;
+    float A0312 = m.m10 * m.m23 - m.m13 * m.m20;
+    float A0212 = m.m10 * m.m22 - m.m12 * m.m20;
+    float A0113 = m.m10 * m.m31 - m.m11 * m.m30;
+    float A0112 = m.m10 * m.m21 - m.m11 * m.m20;
+
+    float det = 
+        m.m00 * (m.m11 * A2323 - m.m12 * A1323 + m.m13 * A1223) 
+        - m.m01 * (m.m10 * A2323 - m.m12 * A0323 + m.m13 * A0223) 
+        + m.m02 * (m.m10 * A1323 - m.m11 * A0323 + m.m13 * A0123) 
+        - m.m03 * (m.m10 * A1223 - m.m11 * A0223 + m.m12 * A0123);
+    
+    assert(det > 0 && "Matrix is not invertible.");
+    det = 1 / det;
+
+    psr_mat4_t result = {
+        .m00 = det *   (m.m11 * A2323 - m.m12 * A1323 + m.m13 * A1223),
+        .m01 = det * - (m.m01 * A2323 - m.m02 * A1323 + m.m03 * A1223),
+        .m02 = det *   (m.m01 * A2313 - m.m02 * A1313 + m.m03 * A1213),
+        .m03 = det * - (m.m01 * A2312 - m.m02 * A1312 + m.m03 * A1212),
+        .m10 = det * - (m.m10 * A2323 - m.m12 * A0323 + m.m13 * A0223),
+        .m11 = det *   (m.m00 * A2323 - m.m02 * A0323 + m.m03 * A0223),
+        .m12 = det * - (m.m00 * A2313 - m.m02 * A0313 + m.m03 * A0213),
+        .m13 = det *   (m.m00 * A2312 - m.m02 * A0312 + m.m03 * A0212),
+        .m20 = det *   (m.m10 * A1323 - m.m11 * A0323 + m.m13 * A0123),
+        .m21 = det * - (m.m00 * A1323 - m.m01 * A0323 + m.m03 * A0123),
+        .m22 = det *   (m.m00 * A1313 - m.m01 * A0313 + m.m03 * A0113),
+        .m23 = det * - (m.m00 * A1312 - m.m01 * A0312 + m.m03 * A0112),
+        .m30 = det * - (m.m10 * A1223 - m.m11 * A0223 + m.m12 * A0123),
+        .m31 = det *   (m.m00 * A1223 - m.m01 * A0223 + m.m02 * A0123),
+        .m32 = det * - (m.m00 * A1213 - m.m01 * A0213 + m.m02 * A0113),
+        .m33 = det *   (m.m00 * A1212 - m.m01 * A0212 + m.m02 * A0112)
+    };
+    return result;
+}
+
+psr_mat4_t psr_mat4_translate(psr_mat4_t mat4, psr_float3_t f) {
+    psr_mat4_t m;
+    psr_mat4_init_identity(&m);
 
     m.m[3][0] = f.x;
     m.m[3][1] = f.y;
     m.m[3][2] = f.z;
 
-    return psr_matrix_mul(matrix, m);
+    return psr_mat4_mul(mat4, m);
 }
 
-psr_matrix_t psr_matrix_rotate_x(psr_matrix_t matrix, float a) {
+psr_mat4_t psr_mat4_rotate_x(psr_mat4_t m, float a) {
     float s = sinf(a);
     float c = cosf(a);
 
-    psr_matrix_t x;
-    psr_matrix_init_identity(&x);
+    psr_mat4_t x;
+    psr_mat4_init_identity(&x);
 
     x.m[1][1] = c;
     x.m[1][2] = -s;
     x.m[2][1] = s;
     x.m[2][2] = c;
 
-    return psr_matrix_mul(matrix, x);
+    return psr_mat4_mul(m, x);
 }
 
-psr_matrix_t psr_matrix_rotate_y(psr_matrix_t matrix, float a) {
+psr_mat4_t psr_mat4_rotate_y(psr_mat4_t m, float a) {
     float s = sinf(a);
     float c = cosf(a);
 
-    psr_matrix_t y;
-    psr_matrix_init_identity(&y);
+    psr_mat4_t y;
+    psr_mat4_init_identity(&y);
 
     y.m[0][0] = c;
     y.m[0][2] = s;
     y.m[2][0] = -s;
     y.m[2][2] = c;
 
-    return psr_matrix_mul(matrix, y);
+    return psr_mat4_mul(m, y);
 }
 
-psr_matrix_t psr_matrix_rotate_z(psr_matrix_t matrix, float a) {
+psr_mat4_t psr_mat4_rotate_z(psr_mat4_t m, float a) {
     float s = sinf(a);
     float c = cosf(a);
 
-    psr_matrix_t z;
-    psr_matrix_init_identity(&z);
+    psr_mat4_t z;
+    psr_mat4_init_identity(&z);
 
     z.m[0][0] = c;
     z.m[0][1] = -s;
     z.m[1][0] = s;
     z.m[1][1] = c;
 
-    return psr_matrix_mul(matrix, z);
+    return psr_mat4_mul(m, z);
 }
 
-psr_matrix_t psr_matrix_scale(psr_matrix_t matrix, psr_float3_t f) {
-    psr_matrix_t m;
-    psr_matrix_init_identity(&m);
+psr_mat4_t psr_mat4_scale(psr_mat4_t mat4, psr_float3_t f) {
+    psr_mat4_t m;
+    psr_mat4_init_identity(&m);
 
     m.m[0][0] = f.x;
     m.m[1][1] = f.y;
     m.m[2][2] = f.z;
 
-    return psr_matrix_mul(matrix, m);
+    return psr_mat4_mul(mat4, m);
 }
 
-psr_float3_t psr_matrix_mul_float3(psr_matrix_t matrix, psr_float3_t f) {
-    psr_float4_t f4;
-    for (int x = 0; x < 4; x++) {
+psr_float3_t psr_mat3_mul_float3(psr_mat3_t m, psr_float3_t f) {
+    psr_float3_t result;
+    for (int x = 0; x < 3; x++) {
         float i = 0;
         for (int y = 0; y < 3; y++) {
-            i += matrix.m[x][y] * f.values[y];
-        }
-        f4.values[x] = i + matrix.m[x][3];
-    }
-    
-    if (f4.w != 0) {
-        f4.x /= f4.w;
-        f4.y /= f4.w;
-        f4.z /= f4.w;
-    }
-
-    psr_float3_t result = {f4.x, f4.y, f4.z};
-    return result;
-}
-
-psr_float4_t psr_matrix_mul_float4(psr_matrix_t matrix, psr_float4_t f) {
-    psr_float4_t result;
-    for (int x = 0; x < 4; x++) {
-        float i = 0;
-        for (int y = 0; y < 4; y++) {
-            i += matrix.m[x][y] * f.values[y];
+            i += m.m[x][y] * f.values[y];
         }
         result.values[x] = i;
     }
     return result;
 }
 
-psr_float3_t psr_float3_mul_matrix(psr_float3_t f, psr_matrix_t matrix) {
-    psr_float4_t f4;
-    for (int y = 0; y < 4; y++) {
+psr_float3_t psr_float3_mul_mat3(psr_float3_t f, psr_mat3_t m) {
+    psr_float3_t result;
+    for (int y = 0; y < 3; y++) {
         float i = 0;
         for (int x = 0; x < 3; x++) {
-            i += matrix.m[x][y] * f.values[x];
+            i += m.m[x][y] * f.values[x];
         }
-        f4.values[y] = i + matrix.m[3][y];
+        result.values[y] = i;
+    }
+    return result;
+}
+
+psr_float3_t psr_mat4_mul_float3(psr_mat4_t m, psr_float3_t f) {
+    psr_float4_t f4;
+    for (int x = 0; x < 4; x++) {
+        float i = 0;
+        for (int y = 0; y < 3; y++) {
+            i += m.m[x][y] * f.values[y];
+        }
+        f4.values[x] = i + m.m[x][3];
     }
     
     if (f4.w != 0) {
@@ -210,26 +297,68 @@ psr_float3_t psr_float3_mul_matrix(psr_float3_t f, psr_matrix_t matrix) {
     return result;
 }
 
-psr_float4_t psr_float4_mul_matrix(psr_float4_t f, psr_matrix_t matrix) {
+psr_float4_t psr_mat4_mul_float4(psr_mat4_t m, psr_float4_t f) {
+    psr_float4_t result;
+    for (int x = 0; x < 4; x++) {
+        float i = 0;
+        for (int y = 0; y < 4; y++) {
+            i += m.m[x][y] * f.values[y];
+        }
+        result.values[x] = i;
+    }
+    return result;
+}
+
+psr_float3_t psr_float3_mul_mat4(psr_float3_t f, psr_mat4_t m) {
+    psr_float4_t f4;
+    for (int y = 0; y < 4; y++) {
+        float i = 0;
+        for (int x = 0; x < 3; x++) {
+            i += m.m[x][y] * f.values[x];
+        }
+        f4.values[y] = i + m.m[3][y];
+    }
+    
+    if (f4.w != 0) {
+        f4.x /= f4.w;
+        f4.y /= f4.w;
+        f4.z /= f4.w;
+    }
+
+    psr_float3_t result = {f4.x, f4.y, f4.z};
+    return result;
+}
+
+psr_float4_t psr_float4_mul_mat4(psr_float4_t f, psr_mat4_t m) {
     psr_float4_t result;
     for (int y = 0; y < 4; y++) {
         float i = 0;
         for (int x = 0; x < 4; x++) {
-            i += matrix.m[x][y] * f.values[x];
+            i += m.m[x][y] * f.values[x];
         }
         result.values[y] = i;
     }
     return result;
 }
 
-psr_matrix_t psr_look_at(psr_float3_t pos, psr_float3_t target, psr_float3_t up) {
+psr_mat3_t psr_mat4_to_mat3(psr_mat4_t m) {
+    psr_mat3_t r;
+    for (int x = 0; x < 3; x++) {
+        for (int y = 0; y < 3; y++) {
+            r.m[x][y] = m.m[x][y];
+        }
+    }
+    return r;
+}
+
+psr_mat4_t psr_look_at(psr_float3_t pos, psr_float3_t target, psr_float3_t up) {
     psr_float3_t diff = {target.x - pos.x, target.y - pos.y, target.z - pos.z};
     psr_float3_t forward = psr_normalize(diff);
     psr_float3_t right = psr_normalize(psr_cross(forward, up));
     psr_float3_t local_up = psr_normalize(psr_cross(right, forward));
 
-    psr_matrix_t m;
-    psr_matrix_init_identity(&m);
+    psr_mat4_t m;
+    psr_mat4_init_identity(&m);
     m.m[0][0] = right.x;
     m.m[1][0] = right.y;
     m.m[2][0] = right.z;
@@ -245,9 +374,9 @@ psr_matrix_t psr_look_at(psr_float3_t pos, psr_float3_t target, psr_float3_t up)
     return m;
 }
 
-psr_matrix_t psr_perspective(float aspect, float fov, float near, float far) {    
-    psr_matrix_t m;
-    psr_matrix_init_zero(&m);
+psr_mat4_t psr_perspective(float aspect, float fov, float near, float far) {    
+    psr_mat4_t m;
+    psr_mat4_init_zero(&m);
 
     float half_tan = tanf(fov / 2);
 
@@ -307,8 +436,14 @@ psr_byte4_t psr_texture_sample(psr_texture_t texture, float u, float v) {
     return *psr_texture_at(&texture, (int)(u * texture.w), (int)(v * texture.h - 1));
 }
 
-psr_bresenham_line_t psr_bresenham_line_create(psr_int2_t start, psr_int2_t end) {
-    psr_bresenham_line_t line;
+void _psr_line_2d_swap(psr_line_2d_t* a, psr_line_2d_t* b) {
+    psr_line_2d_t temp = *a;
+    *a = *b;
+    *b = temp;
+}
+
+psr_line_2d_t _psr_line_2d_create(psr_int2_t start, psr_int2_t end) {
+    psr_line_2d_t line;
     line.start = start;
     line.end = end;
     line.current = start;
@@ -318,7 +453,7 @@ psr_bresenham_line_t psr_bresenham_line_create(psr_int2_t start, psr_int2_t end)
     return line;
 }
 
-int psr_bresenham_line_step(psr_bresenham_line_t* line) {
+int _psr_line_2d_step(psr_line_2d_t* line) {
     if (line->current.x == line->end.x && line->current.y == line->end.y) {
         return 0;
     }
@@ -342,7 +477,7 @@ int psr_bresenham_line_step(psr_bresenham_line_t* line) {
 }
 
 // TODO: find more accurate way.
-float _psr_bresenham_line_inverse_lerp(psr_int2_t start, psr_int2_t end, psr_int2_t current) {
+float _psr_line_2d_inverse_lerp(psr_int2_t start, psr_int2_t end, psr_int2_t current) {
     if (end.x - start.x > end.y - start.y) {
         return (current.x - start.x) / (float)(end.x - start.x);
     }
@@ -350,15 +485,15 @@ float _psr_bresenham_line_inverse_lerp(psr_int2_t start, psr_int2_t end, psr_int
 }
 
 void psr_raster_line(psr_color_buffer_t* color_buffer, psr_int2_t start, psr_int2_t end, psr_byte3_t start_color, psr_byte3_t end_color) {
-    psr_bresenham_line_t line = psr_bresenham_line_create(start, end);
+    psr_line_2d_t line = _psr_line_2d_create(start, end);
     do {
-        psr_byte3_t current_color = psr_byte3_lerp(start_color, end_color, _psr_bresenham_line_inverse_lerp(start, end, line.current));
+        psr_byte3_t current_color = psr_byte3_lerp(start_color, end_color, _psr_line_2d_inverse_lerp(start, end, line.current));
         *psr_color_buffer_at(color_buffer, line.current.x, line.current.y) = current_color;
     } 
-    while (psr_bresenham_line_step(&line));
+    while (_psr_line_2d_step(&line));
 }
 
-void _psr_sort_triangle_vertices_by_height(psr_int2_t* pos0, psr_int2_t* pos1, psr_int2_t* pos2) {
+void _psr_sort_triangle_vertices_by_height_int2(psr_int2_t* pos0, psr_int2_t* pos1, psr_int2_t* pos2) {
     if (pos0->y > pos1->y) {
         psr_int2_swap(pos0, pos1);
     }
@@ -370,10 +505,22 @@ void _psr_sort_triangle_vertices_by_height(psr_int2_t* pos0, psr_int2_t* pos1, p
     }
 }
 
-int _psr_bresenham_line_step_until_vertical_difference(psr_bresenham_line_t* line) {
+void _psr_sort_triangle_vertices_by_height_float3(psr_float3_t* pos0, psr_float3_t* pos1, psr_float3_t* pos2) {
+    if (pos0->y > pos1->y) {
+        psr_float3_swap(pos0, pos1);
+    }
+    if (pos0->y > pos2->y) {
+        psr_float3_swap(pos0, pos2);
+    }
+    if (pos1->y > pos2->y) {
+        psr_float3_swap(pos1, pos2);
+    }
+}
+
+int _psr_line_2d_step_until_vertical_difference(psr_line_2d_t* line) {
     int y = line->current.y;
 
-    while (psr_bresenham_line_step(line)) {
+    while (_psr_line_2d_step(line)) {
         if (line->current.y != y) {
             return 1;
         }
@@ -382,46 +529,50 @@ int _psr_bresenham_line_step_until_vertical_difference(psr_bresenham_line_t* lin
     return 0;
 }
 
-// Either the top or bottom of the triangle must be flat (the lines must share the same start and end y position).
-void _psr_raster_triangle_2d_flat(psr_color_buffer_t* color_buffer, psr_bresenham_line_t line_a, psr_bresenham_line_t line_b, psr_byte3_t color) {
+// Flat top or flat bottom.
+void _psr_raster_triangle_2d_flat(psr_color_buffer_t* color_buffer, psr_line_2d_t line_a, psr_line_2d_t line_b, psr_byte3_t color) {
+    if (line_a.start.x > line_b.start.x || line_a.end.x > line_b.end.x) {
+        _psr_line_2d_swap(&line_a, &line_b);
+    }
+    
     for (int y = line_a.start.y; y <= line_a.end.y; y++) {
         int start = line_a.current.x;
         int end = line_b.current.x;
 
-        if (start > end) {
-            psr_swap(&start, &end);
-        }
-
         for (int x = start; x <= end; x++) {
-            // TODO: find way to check bounds.
-            if (x >= 0 && x < color_buffer->w && y >= 0 && y < color_buffer->h) {
-                *psr_color_buffer_at(color_buffer, x, y) = color;
-            }
+            *psr_color_buffer_at(color_buffer, x, y) = color;
         }
 
-        _psr_bresenham_line_step_until_vertical_difference(&line_a);
-        _psr_bresenham_line_step_until_vertical_difference(&line_b);
+        _psr_line_2d_step_until_vertical_difference(&line_a);
+        _psr_line_2d_step_until_vertical_difference(&line_b);
     }
 }
 
 void psr_raster_triangle_2d_color(psr_color_buffer_t* color_buffer, psr_int2_t pos0, psr_int2_t pos1, psr_int2_t pos2, psr_byte3_t color) {
-    _psr_sort_triangle_vertices_by_height(&pos0, &pos1, &pos2);
+    // HACK: discard triangle if any of it's vertices are outside view.
+    if (pos0.x < 0 || pos0.x >= color_buffer->w || pos0.y < 0 || pos0.y >= color_buffer->h ||
+        pos1.x < 0 || pos1.x >= color_buffer->w || pos1.y < 0 || pos1.y >= color_buffer->h ||
+        pos2.x < 0 || pos2.x >= color_buffer->w || pos2.y < 0 || pos2.y >= color_buffer->h) {
+        return;
+    }
+    
+    _psr_sort_triangle_vertices_by_height_int2(&pos0, &pos1, &pos2);
 
     // Check if the top of the triangle is flat.
     if (pos0.y == pos1.y) {
-        _psr_raster_triangle_2d_flat(color_buffer, psr_bresenham_line_create(pos0, pos2), psr_bresenham_line_create(pos1, pos2), color);
+        _psr_raster_triangle_2d_flat(color_buffer, _psr_line_2d_create(pos0, pos2), _psr_line_2d_create(pos1, pos2), color);
     }
     // Check if the bottom is flat.
     else if (pos1.y == pos2.y) {
-        _psr_raster_triangle_2d_flat(color_buffer, psr_bresenham_line_create(pos0, pos1), psr_bresenham_line_create(pos0, pos2), color);
+        _psr_raster_triangle_2d_flat(color_buffer, _psr_line_2d_create(pos0, pos1), _psr_line_2d_create(pos0, pos2), color);
     }
     // Else plit triangle into two smaller triangles.
     else {
         psr_int2_t pos3 = {(int)(pos0.x + ((float)(pos1.y - pos0.y) / (float)(pos2.y - pos0.y)) * (float)(pos2.x - pos0.x)), pos1.y};
         // Top (flat bottom).
-        _psr_raster_triangle_2d_flat(color_buffer, psr_bresenham_line_create(pos0, pos1), psr_bresenham_line_create(pos0, pos3), color);
+        _psr_raster_triangle_2d_flat(color_buffer, _psr_line_2d_create(pos0, pos1), _psr_line_2d_create(pos0, pos3), color);
         // Bottom (flat top).
-        _psr_raster_triangle_2d_flat(color_buffer, psr_bresenham_line_create(pos3, pos2), psr_bresenham_line_create(pos1, pos2), color);
+        _psr_raster_triangle_2d_flat(color_buffer, _psr_line_2d_create(pos3, pos2), _psr_line_2d_create(pos1, pos2), color);
     }
 }
 
@@ -429,11 +580,61 @@ void psr_raster_triangle_2d_callback(psr_color_buffer_t* color_buffer, psr_int2_
     
 }
 
-void psr_raster_triangle_3d(psr_color_buffer_t* color_buffer, psr_depth_buffer_t* depth_buffer, psr_float3_t pos0, psr_float3_t pos1, psr_float3_t pos2, psr_byte3_t color) {
+// Flat top or flat bottom.
+void _psr_raster_triangle_3d_flat(psr_color_buffer_t* color_buffer, psr_depth_buffer_t* depth_buffer, psr_line_2d_t line_a, psr_line_2d_t line_b, psr_byte3_t color) {
+    if (line_a.start.x > line_b.start.x || line_a.end.x > line_b.end.x) {
+        _psr_line_2d_swap(&line_a, &line_b);
+    }
     
+    for (int y = line_a.start.y; y <= line_a.end.y; y++) {
+        int start = line_a.current.x;
+        int end = line_b.current.x;
+
+        for (int x = start; x <= end; x++) {
+            *psr_color_buffer_at(color_buffer, x, y) = color;
+        }
+
+        _psr_line_2d_step_until_vertical_difference(&line_a);
+        _psr_line_2d_step_until_vertical_difference(&line_b);
+    }
 }
 
-void psr_save_bmp(char const* filename, psr_color_buffer_t color_buffer) {
+void psr_raster_triangle_3d(psr_color_buffer_t* color_buffer, psr_depth_buffer_t* depth_buffer, psr_float3_t pos0, psr_float3_t pos1, psr_float3_t pos2, psr_byte3_t color) {
+    // HACK: discard triangle if any of it's vertices are outside view.
+    if (pos0.x < 0 || pos0.x >= color_buffer->w || pos0.y < 0 || pos0.y >= color_buffer->h ||
+        pos1.x < 0 || pos1.x >= color_buffer->w || pos1.y < 0 || pos1.y >= color_buffer->h ||
+        pos2.x < 0 || pos2.x >= color_buffer->w || pos2.y < 0 || pos2.y >= color_buffer->h) {
+        return;
+    }
+    
+    _psr_sort_triangle_vertices_by_height_float3(&pos0, &pos1, &pos2);
+
+    psr_int2_t xy0 = {(int)roundf(pos0.x), (int)roundf(pos0.y)};
+    float z0 = pos0.z;
+    psr_int2_t xy1 = {(int)roundf(pos1.x), (int)roundf(pos1.y)};
+    float z1 = pos1.z;
+    psr_int2_t xy2 = {(int)roundf(pos2.x), (int)roundf(pos2.y)};
+    float z2 = pos2.z;
+
+    // Check if the top of the triangle is flat.
+    if (xy0.y == xy1.y) {
+        _psr_raster_triangle_2d_flat(color_buffer, _psr_line_2d_create(xy0, xy2), _psr_line_2d_create(xy1, xy2), color);
+    }
+    // Check if the bottom is flat.
+    else if (xy1.y == xy2.y) {
+        _psr_raster_triangle_2d_flat(color_buffer, _psr_line_2d_create(xy0, xy1), _psr_line_2d_create(xy0, xy2), color);
+    }
+    // Else plit triangle into two smaller triangles.
+    else {
+        psr_int2_t xy3 = {(int)(xy0.x + ((float)(xy1.y - xy0.y) / (float)(xy2.y - xy0.y)) * (float)(xy2.x - xy0.x)), xy1.y};
+        // Top (flat bottom).
+        _psr_raster_triangle_2d_flat(color_buffer, _psr_line_2d_create(xy0, xy1), _psr_line_2d_create(xy0, xy3), color);
+        // Bottom (flat top).
+        _psr_raster_triangle_2d_flat(color_buffer, _psr_line_2d_create(xy3, xy2), _psr_line_2d_create(xy1, xy2), color);
+    }
+}
+
+void psr_save_bmp(char* path, psr_color_buffer_t color_buffer) {
     psr_byte_t padding[] = {0, 0, 0};
     int padding_size = (4 - color_buffer.w * 3 % 4) % 4;
     int stride = color_buffer.w * 3 + padding_size;
@@ -457,7 +658,7 @@ void psr_save_bmp(char const* filename, psr_color_buffer_t color_buffer) {
         0, 0, 0, 0
     };
 
-    FILE* file = fopen(filename, "wb");
+    FILE* file = fopen(path, "wb");
 
     fwrite(header, 1, 54, file);
 
@@ -485,8 +686,8 @@ int _psr_split(char* str, char const* delims, char** tokens, int max) {
     return count;
 }
 
-int psr_load_obj(char const* filename, psr_mesh_t* mesh) {
-    FILE* file = fopen(filename, "r");
+int psr_load_obj(char* path, psr_mesh_t* mesh) {
+    FILE* file = fopen(path, "r");
     if (!file) {
         return 0;
     }

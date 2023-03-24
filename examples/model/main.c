@@ -9,8 +9,18 @@
 #define WIDTH 640
 #define HEIGHT 640
 
+int pause_flag = 0;
+float spin_animation = 0;
+
 pwa_pixel_buffer_t on_draw(void* user_data) {
     return *(pwa_pixel_buffer_t*)user_data;
+}
+
+void on_key_down(int key_code, void* user_data) {
+    // Press space to pause animation!
+    if (key_code == ' ') {
+        pause_flag = !pause_flag;
+    }
 }
 
 int main() {
@@ -28,8 +38,8 @@ int main() {
     psr_color_buffer_t color_buffer;
     psr_color_buffer_init(&color_buffer, WIDTH, HEIGHT);
 
-    /*psr_depth_buffer_t depth_buffer;
-    psr_depth_buffer_init(&depth_buffer, WIDTH, HEIGHT);*/
+    psr_depth_buffer_t depth_buffer;
+    psr_depth_buffer_init(&depth_buffer, WIDTH, HEIGHT);
 
     pwa_pixel_buffer_t pixel_buffer;
     pixel_buffer.pixels = malloc(WIDTH * HEIGHT * sizeof(uint32_t));
@@ -45,11 +55,27 @@ int main() {
     }
     
     pwa_window_set_draw_callback(window, on_draw);
+    pwa_window_set_key_down_callback(window, on_key_down);
+
+    psr_float3_t camera_pos = {15, 15, -25};
+    psr_float3_t camera_target = {0, 0, 0};
+    psr_mat4_t view = psr_look_at(camera_pos, camera_target, (psr_float3_t){0, -1, 0});
+    psr_mat4_t projection = psr_perspective(HEIGHT / (float)WIDTH, 75.f * (M_PI / 180), 0.1f, 1000.f);
+
+    float last_frame = pwa_get_elapsed_time_ms();
 
     while (!pwa_window_should_close(window)) {
         pwa_window_poll_events(window);
 
-        //psr_depth_buffer_clear(&depth_buffer);
+        float current_frame = pwa_get_elapsed_time_ms();
+        float delta = current_frame - last_frame;
+        last_frame = current_frame;
+
+        if (!pause_flag) {
+            spin_animation += delta * M_PI / 1000;
+        }
+
+        psr_depth_buffer_clear(&depth_buffer);
 
         // Gradient background.
         for (int y = 0; y < HEIGHT; y++) {
@@ -61,28 +87,41 @@ int main() {
             }
         }
 
-        psr_float3_t camera_pos = {15, 15, -25};
-        psr_matrix_t view = psr_look_at(camera_pos, (psr_float3_t){0, 0, 0}, (psr_float3_t){0, -1, 0});
-        psr_matrix_t projection = psr_perspective(HEIGHT / (float)WIDTH, 75.f * (M_PI / 180), 0.1f, 1000.f);
+        psr_mat4_t model;
+        psr_mat4_init_identity(&model);
+        model = psr_mat4_translate(model, (psr_float3_t){-.5, -.5, -.5});
+        model = psr_mat4_rotate_x(model, 90.f * (M_PI / 180));
+        model = psr_mat4_rotate_y(model, spin_animation);
+        
+        psr_mat4_t mv = psr_mat4_mul(model, view);
+        psr_mat4_t mvp = psr_mat4_mul(psr_mat4_mul(model, view), projection);
+        psr_mat3_t normal_matrix = psr_mat4_to_mat3(psr_mat4_transpose(psr_mat4_inverse(model)));
 
-        float spin_animation = pwa_get_elapsed_time_ms() * M_PI / 1000;
-
-        psr_matrix_t model;
-        psr_matrix_init_identity(&model);
-        model = psr_matrix_translate(model, (psr_float3_t){-.5, -.5, -.5});
-        model = psr_matrix_rotate_x(model, 90.f * (M_PI / 180));
-        model = psr_matrix_rotate_y(model, 180.f * (M_PI / 180));
-        model = psr_matrix_rotate_y(model, spin_animation);
-
-        psr_matrix_t mvp = psr_matrix_mul(psr_matrix_mul(model, view), projection);
-
-        // Copy positions from mesh to preserve original.
+        // Make a copy of the mesh's positions to preserve the original mesh.
         psr_float3_t* positions = malloc(mesh.position_count * sizeof(psr_float3_t));
         memcpy(positions, mesh.positions, mesh.position_count * sizeof(psr_float3_t));
 
-        // Vertex multiplication and scale to viewport.
+        int* face_cull_flags = malloc(mesh.face_count * sizeof(int));
+
+        // Backface culling.
+        for (int i = 0; i < mesh.face_count; i++) {
+            // Pick any one of the triangle's points, put it in model space and check if the triangle should be culled.
+            
+            psr_float3_t any_point_on_triangle = psr_float3_mul_mat4(positions[mesh.faces[i].position_indices[0]], model);
+            psr_float3_t direction_towards_point = psr_normalize(psr_float3_sub(any_point_on_triangle, camera_pos));
+            psr_float3_t normal = psr_float3_mul_mat3(mesh.normals[mesh.faces[i].normal_indices[0]], normal_matrix);
+
+            if (psr_dot(direction_towards_point, normal) >= 0) {
+                face_cull_flags[i] = 1;
+            }
+            else {
+                face_cull_flags[i] = 0;
+            }
+        }
+
+        // Model/view/projection transform and viewport scaling.
         for (int i = 0; i < mesh.position_count; i++) {
-            positions[i] = psr_float3_mul_matrix(positions[i], mvp);
+            positions[i] = psr_float3_mul_mat4(positions[i], mvp);
 
             // Scale from [-1, 1] to viewport size.
             positions[i].x = (positions[i].x + 1) / 2.f * WIDTH;
@@ -91,20 +130,28 @@ int main() {
 
         // Render triangles.
         for (int i = 0; i < mesh.face_count; i++) {
-            psr_float3_t normal = mesh.normals[mesh.faces[i].normal_indices[0]];
-            
-            psr_float3_t light_dir = psr_normalize((psr_float3_t){0, 1, .5});
-            float light = psr_dot(normal, light_dir);
-            psr_byte3_t color = {255 * light, 255 * light, 255 * light};
-
-            psr_int2_t tri[3];
-            for (int j = 0; j < 3; j++) {
-                tri[j].x = (int)roundf(positions[mesh.faces[i].position_indices[j]].x);
-                tri[j].y = (int)roundf(positions[mesh.faces[i].position_indices[j]].y);
+            if (face_cull_flags[i]) {
+                continue;
             }
-            psr_raster_triangle_2d_color(&color_buffer, tri[0], tri[1], tri[2], color);
+
+            psr_float3_t tri[3];
+            for (int j = 0; j < 3; j++) {
+                tri[j] = positions[mesh.faces[i].position_indices[j]];
+            }
+
+            psr_float3_t normal = psr_float3_mul_mat3(mesh.normals[mesh.faces[i].normal_indices[0]], normal_matrix);
+
+            psr_float3_t light_dir = {1, 0, 0};
+            float light = psr_dot(normal, light_dir);
+            if (light < 0) {
+                light = 0;
+            }
+            psr_byte3_t color = {255 * light, 255 * light, 255 * light};
+            
+            psr_raster_triangle_3d(&color_buffer, &depth_buffer, tri[0], tri[1], tri[2], color);
         }
 
+        free(face_cull_flags);
         free(positions);
 
         // Copy color buffer into pixel buffer.
