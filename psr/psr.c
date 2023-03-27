@@ -1,10 +1,21 @@
 #include "psr.h"
 
 #include <stdlib.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
 #include <assert.h>
+
+#define PSR_SWAP(type, a, b) { type _temp = a; a = b; b = _temp; }
+
+#define PSR_SORT_TRIANGLE_VERTICES_BY_HEIGHT(type, a, b, c) \
+    if (a.y > b.y)                                        \
+        PSR_SWAP(type, a, b);                               \
+    if (a.y > c.y)                                        \
+        PSR_SWAP(type, a, c);                               \
+    if (b.y > c.y)                                        \
+        PSR_SWAP(type, b, c);
 
 typedef struct {
     psr_int2_t start;
@@ -43,34 +54,6 @@ psr_float3_t psr_cross(psr_float3_t a, psr_float3_t b) {
 
 float psr_dot(psr_float3_t a, psr_float3_t b) {
     return a.x * b.x + a.y * b.y + a.z * b.z;
-}
-
-void psr_swap(int* a, int* b) {
-    int temp = *a;
-    *a = *b;
-    *b = temp;
-}
-
-void psr_swapf(float* a, float* b) {
-    float temp = *a;
-    *a = *b;
-    *b = temp;
-}
-
-void psr_int2_swap(psr_int2_t* a, psr_int2_t* b) {
-    psr_swap(&a->x, &b->x);
-    psr_swap(&a->y, &b->y);
-}
-
-void psr_float2_swap(psr_float2_t* a, psr_float2_t* b) {
-    psr_swapf(&a->x, &b->x);
-    psr_swapf(&a->y, &b->y);
-}
-
-void psr_float3_swap(psr_float3_t* a, psr_float3_t* b) {
-    psr_swapf(&a->x, &b->x);
-    psr_swapf(&a->y, &b->y);
-    psr_swapf(&a->z, &b->z);
 }
 
 psr_byte3_t psr_byte3_lerp(psr_byte3_t a, psr_byte3_t b, float amount) {
@@ -396,6 +379,7 @@ void psr_color_buffer_init(psr_color_buffer_t* color_buffer, int width, int heig
 
 void psr_color_buffer_free(psr_color_buffer_t* color_buffer) {
     free(color_buffer->data);
+    color_buffer->data = NULL;
 }
 
 psr_byte3_t* psr_color_buffer_at(psr_color_buffer_t* color_buffer, int x, int y) {
@@ -416,6 +400,7 @@ void psr_depth_buffer_init(psr_depth_buffer_t* depth_buffer, int width, int heig
 
 void psr_depth_buffer_free(psr_depth_buffer_t* depth_buffer) {
     free(depth_buffer->data);
+    depth_buffer->data = NULL;
 }
 
 float* psr_depth_buffer_at(psr_depth_buffer_t* depth_buffer, int x, int y) {
@@ -428,18 +413,48 @@ void psr_depth_buffer_clear(psr_depth_buffer_t* depth_buffer) {
     }
 }
 
-psr_byte4_t* psr_texture_at(psr_texture_t* texture, int x, int y) {
-    return &texture->data[y * texture->w + x];
+// Bytes per pixel.
+int _psr_pixel_size(psr_color_depth_t color_depth) {
+    switch (color_depth) {
+    case PSR_R5G6B5:
+    case PSR_A1R5G5B5:
+        return 2;
+    case PSR_R8G8B8:
+        return 3;
+    case PSR_A8R8G8B8:
+        return 4;
+    default:
+        assert(!"Not implemented.");
+    }
 }
 
-psr_byte4_t psr_texture_sample(psr_texture_t texture, float u, float v) {
-    return *psr_texture_at(&texture, (int)(u * texture.w), (int)(v * texture.h - 1));
+int _psr_channels(psr_color_depth_t color_depth) {
+    switch (color_depth) {
+    case PSR_R5G6B5:
+    case PSR_R8G8B8:
+        return 3;
+    case PSR_A1R5G5B5:
+    case PSR_A8R8G8B8:
+        return 4;
+    default:
+        assert(!"Not implemented.");
+    }
 }
 
-void _psr_line_2d_swap(psr_line_2d_t* a, psr_line_2d_t* b) {
-    psr_line_2d_t temp = *a;
-    *a = *b;
-    *b = temp;
+void psr_image_init(psr_image_t* image, psr_color_depth_t color_depth, int w, int h) {
+    image->w = w;
+    image->h = h;
+    image->color_depth = color_depth;
+    image->data = malloc(w * h * _psr_pixel_size(color_depth));
+}
+
+void psr_image_free(psr_image_t* image) {
+    free(image->data);
+    image->data = NULL;
+}
+
+psr_byte_t* psr_image_at(psr_image_t* image, int x, int y) {
+    return &image->data[(y * image->w + x) * _psr_pixel_size(image->color_depth)];
 }
 
 psr_line_2d_t _psr_line_2d_create(psr_int2_t start, psr_int2_t end) {
@@ -493,30 +508,6 @@ void psr_raster_line(psr_color_buffer_t* color_buffer, psr_int2_t start, psr_int
     while (_psr_line_2d_step(&line));
 }
 
-void _psr_sort_triangle_vertices_by_height_int2(psr_int2_t* pos0, psr_int2_t* pos1, psr_int2_t* pos2) {
-    if (pos0->y > pos1->y) {
-        psr_int2_swap(pos0, pos1);
-    }
-    if (pos0->y > pos2->y) {
-        psr_int2_swap(pos0, pos2);
-    }
-    if (pos1->y > pos2->y) {
-        psr_int2_swap(pos1, pos2);
-    }
-}
-
-void _psr_sort_triangle_vertices_by_height_float3(psr_float3_t* pos0, psr_float3_t* pos1, psr_float3_t* pos2) {
-    if (pos0->y > pos1->y) {
-        psr_float3_swap(pos0, pos1);
-    }
-    if (pos0->y > pos2->y) {
-        psr_float3_swap(pos0, pos2);
-    }
-    if (pos1->y > pos2->y) {
-        psr_float3_swap(pos1, pos2);
-    }
-}
-
 int _psr_line_2d_step_until_vertical_difference(psr_line_2d_t* line) {
     int y = line->current.y;
 
@@ -532,7 +523,7 @@ int _psr_line_2d_step_until_vertical_difference(psr_line_2d_t* line) {
 // Flat top or flat bottom.
 void _psr_raster_triangle_2d_flat(psr_color_buffer_t* color_buffer, psr_line_2d_t line_a, psr_line_2d_t line_b, psr_byte3_t color) {
     if (line_a.start.x > line_b.start.x || line_a.end.x > line_b.end.x) {
-        _psr_line_2d_swap(&line_a, &line_b);
+        PSR_SWAP(psr_line_2d_t, line_a, line_b);
     }
     
     for (int y = line_a.start.y; y <= line_a.end.y; y++) {
@@ -556,7 +547,7 @@ void psr_raster_triangle_2d_color(psr_color_buffer_t* color_buffer, psr_int2_t p
         return;
     }
     
-    _psr_sort_triangle_vertices_by_height_int2(&pos0, &pos1, &pos2);
+    PSR_SORT_TRIANGLE_VERTICES_BY_HEIGHT(psr_int2_t, pos0, pos1, pos2);
 
     // Check if the top of the triangle is flat.
     if (pos0.y == pos1.y) {
@@ -583,7 +574,7 @@ void psr_raster_triangle_2d_callback(psr_color_buffer_t* color_buffer, psr_int2_
 // Flat top or flat bottom.
 void _psr_raster_triangle_3d_flat(psr_color_buffer_t* color_buffer, psr_depth_buffer_t* depth_buffer, psr_line_2d_t line_a, psr_line_2d_t line_b, psr_byte3_t color) {
     if (line_a.start.x > line_b.start.x || line_a.end.x > line_b.end.x) {
-        _psr_line_2d_swap(&line_a, &line_b);
+        PSR_SWAP(psr_line_2d_t, line_a, line_b);
     }
     
     for (int y = line_a.start.y; y <= line_a.end.y; y++) {
@@ -607,7 +598,7 @@ void psr_raster_triangle_3d(psr_color_buffer_t* color_buffer, psr_depth_buffer_t
         return;
     }
     
-    _psr_sort_triangle_vertices_by_height_float3(&pos0, &pos1, &pos2);
+    PSR_SORT_TRIANGLE_VERTICES_BY_HEIGHT(psr_float3_t, pos0, pos1, pos2);
 
     psr_int2_t xy0 = {(int)roundf(pos0.x), (int)roundf(pos0.y)};
     float z0 = pos0.z;
@@ -632,6 +623,72 @@ void psr_raster_triangle_3d(psr_color_buffer_t* color_buffer, psr_depth_buffer_t
         // Bottom (flat top).
         _psr_raster_triangle_2d_flat(color_buffer, _psr_line_2d_create(xy3, xy2), _psr_line_2d_create(xy1, xy2), color);
     }
+}
+
+void psr_raster_image(psr_color_buffer_t* color_buffer, psr_image_t image, int x, int y, int sx, int sy, int sw, int sh) {
+    for (int _x = 0; _x < sw; _x++) {
+        for (int _y = 0; _y < sh; _y++) {
+            psr_byte3_t* dst = psr_color_buffer_at(color_buffer, _x + x, _y + y);
+            void* src = psr_image_at(&image, _x + sx, _y + sy);
+
+            switch (image.color_depth) {
+            case PSR_R8G8B8:
+                for (int i = 0; i < 3; i++) {
+                    dst->values[i] = *((psr_byte_t*)src + i);
+                }
+                break;
+            case PSR_R5G6B5:
+            case PSR_A1R5G5B5:
+            case PSR_A8R8G8B8:
+            default:
+                assert(!"Not implemented.");
+            }
+        }
+    }
+}
+
+psr_image_t psr_load_bmp(char* path, psr_color_depth_t color_depth) {
+    FILE* file = fopen(path, "rb");
+
+    psr_byte_t header[54];
+    fread(header, 1, 54, file);
+
+    int file_size = (header[2]) | (header[3] << 8) | (header[4] << 16) | (header[5] << 24);
+    int width = (header[18]) | (header[19] << 8) | (header[20] << 16) | (header[21] << 24);
+    int height = (header[22]) | (header[23] << 8) | (header[24] << 16) | (header[25] << 24);
+    int pixel_size = header[28] / 8;
+    int padding_size = (4 - width * 3 % 4) % 4;
+
+    assert(pixel_size == _psr_pixel_size(color_depth) && "Requested color depth does not match image color depth.");
+
+    psr_image_t image;
+    psr_image_init(&image, color_depth, width, height);
+
+    psr_byte_t* pixel_data = malloc(file_size - 54);
+    fread(pixel_data, 1, file_size - 54, file);
+    fclose(file);
+
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            int i = ((height - y) * (width + padding_size) + x) * pixel_size;
+
+            switch (color_depth) {
+            case PSR_R8G8B8:
+            case PSR_A8R8G8B8:
+                for (int j = 0; j < _psr_channels(color_depth); j++) {
+                    *(psr_image_at(&image, x, y) + j) = *(pixel_data + i + (_psr_channels(color_depth) - 1 - j));
+                }
+                break;
+            case PSR_R5G6B5:
+            case PSR_A1R5G5B5:
+            default:
+                assert(!"Not implemented.");
+            }
+        }
+    }
+    free(pixel_data);
+
+    return image;
 }
 
 void psr_save_bmp(char* path, psr_color_buffer_t color_buffer) {
@@ -662,8 +719,8 @@ void psr_save_bmp(char* path, psr_color_buffer_t color_buffer) {
 
     fwrite(header, 1, 54, file);
 
-    for (int y = 0; y < color_buffer.h; ++y) {
-        for (int x = 0; x < color_buffer.w; ++x) {
+    for (int y = 0; y < color_buffer.h; y++) {
+        for (int x = 0; x < color_buffer.w; x++) {
             int i = (color_buffer.h - y) * color_buffer.h + x;
             psr_byte3_t pixel = color_buffer.data[i];
             psr_byte3_t color = {.r = pixel.b, .g = pixel.g, .b = pixel.r};
@@ -804,4 +861,8 @@ void psr_mesh_free(psr_mesh_t* mesh) {
     free(mesh->tex_coords);
     free(mesh->normals);
     free(mesh->faces);
+    mesh->positions = NULL;
+    mesh->tex_coords = NULL;
+    mesh->normals = NULL;
+    mesh->faces = NULL;
 }

@@ -93,10 +93,21 @@ typedef struct {
     float* data;
 } psr_depth_buffer_t;
 
+typedef enum {
+    // 16bit.
+    PSR_R5G6B5      = 1 << 0,
+    PSR_A1R5G5B5    = 1 << 1, 
+    // 24bit.
+    PSR_R8G8B8      = 1 << 2,
+    // 32bit.
+    PSR_A8R8G8B8    = 1 << 3
+} psr_color_depth_t;
+
 typedef struct {
     int w, h;
-    psr_byte4_t* data;
-} psr_texture_t;
+    psr_color_depth_t color_depth;
+    psr_byte_t* data;
+} psr_image_t;
 
 typedef struct {
     int position_indices[3];
@@ -165,23 +176,28 @@ void psr_depth_buffer_free(psr_depth_buffer_t* depth_buffer);
 float* psr_depth_buffer_at(psr_depth_buffer_t* depth_buffer, int x, int y);
 void psr_depth_buffer_clear(psr_depth_buffer_t* depth_buffer);
 
-// Texture.
+// Image.
 
-psr_byte4_t* psr_texture_at(psr_texture_t* texture, int x, int y);
-psr_byte4_t psr_texture_sample(psr_texture_t texture, float u, float v);
+void psr_image_init(psr_image_t* image, psr_color_depth_t color_depth, int w, int h);
+void psr_image_free(psr_image_t* image);
+// Retuns the address of the first byte of the pixel.
+psr_byte_t* psr_image_at(psr_image_t* image, int x, int y);
 
 // Raster.
 
 void psr_raster_line(psr_color_buffer_t* color_buffer, psr_int2_t start, psr_int2_t end, psr_byte3_t start_color, psr_byte3_t end_color);
 
 void psr_raster_triangle_2d_color(psr_color_buffer_t* color_buffer, psr_int2_t pos0, psr_int2_t pos1, psr_int2_t pos2, psr_byte3_t color);
-void psr_raster_triangle_2d_texture(psr_color_buffer_t* color_buffer, psr_int2_t pos0, psr_int2_t pos1, psr_int2_t pos2);
+void psr_raster_triangle_2d_image(psr_color_buffer_t* color_buffer, psr_int2_t pos0, psr_int2_t pos1, psr_int2_t pos2);
 void psr_raster_triangle_2d_callback(psr_color_buffer_t* color_buffer, psr_int2_t pos0, psr_int2_t pos1, psr_int2_t pos2, void (*callback)(psr_int2_t pixel_pos), void* user_data);
 
 void psr_raster_triangle_3d(psr_color_buffer_t* color_buffer, psr_depth_buffer_t* depth_buffer, psr_float3_t pos0, psr_float3_t pos1, psr_float3_t pos2, psr_byte3_t color);
 
+void psr_raster_image(psr_color_buffer_t* color_buffer, psr_image_t image, int x, int y, int sx, int sy, int sw, int sh);
+
 // Asset I/O.
 
+psr_image_t psr_load_bmp(char* path, psr_color_depth_t color_depth);
 void psr_save_bmp(char* path, psr_color_buffer_t color_buffer);
 // Very basic OBJ loader.
 // @return 0 on failure to open file and -1 on bad model.

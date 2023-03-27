@@ -3,3 +3,4 @@ tests
 *.exe
 *.dll
 *.bmp
+!examples/texture/input.bmp
