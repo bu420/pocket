@@ -425,6 +425,7 @@ int _psr_pixel_size(psr_color_depth_t color_depth) {
         return 4;
     default:
         assert(!"Not implemented.");
+        return -1;
     }
 }
 
@@ -438,6 +439,7 @@ int _psr_channels(psr_color_depth_t color_depth) {
         return 4;
     default:
         assert(!"Not implemented.");
+        return -1;
     }
 }
 
@@ -625,25 +627,50 @@ void psr_raster_triangle_3d(psr_color_buffer_t* color_buffer, psr_depth_buffer_t
     }
 }
 
-void psr_raster_image(psr_color_buffer_t* color_buffer, psr_image_t image, int x, int y, int sx, int sy, int sw, int sh) {
-    for (int _x = 0; _x < sw; _x++) {
-        for (int _y = 0; _y < sh; _y++) {
-            psr_byte3_t* dst = psr_color_buffer_at(color_buffer, _x + x, _y + y);
-            void* src = psr_image_at(&image, _x + sx, _y + sy);
+void psr_raster_image(psr_color_buffer_t* color_buffer, psr_image_t image, psr_rect_t src, psr_rect_t dst) {
+    psr_float2_t scale_factor = {src.w / (float)dst.w, src.h / (float)dst.h};
+    
+    for (int x = 0; x < dst.w; x++) {
+        for (int y = 0; y < dst.h; y++) {
+            psr_byte3_t* dst_pixel = psr_color_buffer_at(color_buffer, dst.x + x, dst.y + y);
+            psr_byte_t* src_pixel = psr_image_at(&image, src.x + (int)roundf(x * scale_factor.x), src.y + (int)roundf(y * scale_factor.y));
 
             switch (image.color_depth) {
             case PSR_R8G8B8:
                 for (int i = 0; i < 3; i++) {
-                    dst->values[i] = *((psr_byte_t*)src + i);
+                    dst_pixel->values[i] = *(src_pixel + i);
+                }
+                break;
+            case PSR_A8R8G8B8:
+                // HACK: skip pixel if not fully opaque.
+                if (*src_pixel < 255) {
+                    break;
+                } 
+                for (int i = 0; i < 3; i++) {
+                    dst_pixel->values[i] = *(src_pixel + i + 1);
                 }
                 break;
             case PSR_R5G6B5:
             case PSR_A1R5G5B5:
-            case PSR_A8R8G8B8:
             default:
                 assert(!"Not implemented.");
             }
         }
+    }
+}
+
+void psr_raster_text(psr_color_buffer_t* color_buffer, char* text, psr_int2_t pos, psr_image_t font, int original_size, int size, psr_char_draw_callback on_char_draw, void* user_data) {    
+    float scale = size / (float)original_size;
+
+#define _SCALE(value) (int)roundf(value * scale)
+    
+    for (size_t i = 0; i < strlen(text); i++) {
+        psr_character_info_t info = on_char_draw(text[i], user_data);
+
+        psr_rect_t dst = {pos.x + _SCALE(info.offset.x), pos.y + _SCALE(info.offset.y), _SCALE(info.src.w), _SCALE(info.src.h)};
+        psr_raster_image(color_buffer, font, info.src, dst);
+
+        pos.x += _SCALE(info.x_advance);
     }
 }
 
@@ -654,18 +681,20 @@ psr_image_t psr_load_bmp(char* path, psr_color_depth_t color_depth) {
     fread(header, 1, 54, file);
 
     int file_size = (header[2]) | (header[3] << 8) | (header[4] << 16) | (header[5] << 24);
+    int header_size = (header[10]) | (header[11] << 8) | (header[12] << 16) | (header[13] << 24);
     int width = (header[18]) | (header[19] << 8) | (header[20] << 16) | (header[21] << 24);
     int height = (header[22]) | (header[23] << 8) | (header[24] << 16) | (header[25] << 24);
     int pixel_size = header[28] / 8;
-    int padding_size = (4 - width * 3 % 4) % 4;
+    int padding_size = (4 - width * pixel_size % 4) % 4;
 
-    assert(pixel_size == _psr_pixel_size(color_depth) && "Requested color depth does not match image color depth.");
+    assert(pixel_size == _psr_pixel_size(color_depth) && "Incompatible color depth.");
 
     psr_image_t image;
     psr_image_init(&image, color_depth, width, height);
 
-    psr_byte_t* pixel_data = malloc(file_size - 54);
-    fread(pixel_data, 1, file_size - 54, file);
+    psr_byte_t* pixel_data = malloc(file_size - header_size);
+    fseek(file, header_size, SEEK_SET);
+    fread(pixel_data, 1, file_size - header_size, file);
     fclose(file);
 
     for (int y = 0; y < height; y++) {

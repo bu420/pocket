@@ -84,6 +84,10 @@ typedef union {
 } psr_mat4_t;
 
 typedef struct {
+    int x, y, w, h;
+} psr_rect_t;
+
+typedef struct {
     int w, h;
     psr_byte3_t* data;
 } psr_color_buffer_t;
@@ -126,14 +130,17 @@ typedef struct {
     int face_count;
 } psr_mesh_t;
 
+typedef struct {
+    psr_rect_t src;
+    psr_int2_t offset;
+    int x_advance;
+} psr_character_info_t;
+
+typedef psr_character_info_t (*psr_char_draw_callback)(int c, void* user_data);
+
 psr_float3_t psr_normalize(psr_float3_t f);
 psr_float3_t psr_cross(psr_float3_t a, psr_float3_t b);
 float psr_dot(psr_float3_t a, psr_float3_t b);
-void psr_swap(int* a, int* b);
-void psr_swapf(float* a, float* b);
-void psr_int2_swap(psr_int2_t* a, psr_int2_t* b);
-void psr_float2_swap(psr_float2_t* a, psr_float2_t* b);
-void psr_float3_swap(psr_float3_t* a, psr_float3_t* b);
 psr_byte3_t psr_byte3_lerp(psr_byte3_t a, psr_byte3_t b, float amount);
 
 psr_float3_t psr_float3_add(psr_float3_t a, psr_float3_t b);
@@ -182,6 +189,8 @@ void psr_image_init(psr_image_t* image, psr_color_depth_t color_depth, int w, in
 void psr_image_free(psr_image_t* image);
 // Retuns the address of the first byte of the pixel.
 psr_byte_t* psr_image_at(psr_image_t* image, int x, int y);
+psr_image_t psr_image_copy(psr_image_t image);
+void psr_image_scale(psr_image_t* image, psr_int2_t new_size);
 
 // Raster.
 
@@ -193,7 +202,9 @@ void psr_raster_triangle_2d_callback(psr_color_buffer_t* color_buffer, psr_int2_
 
 void psr_raster_triangle_3d(psr_color_buffer_t* color_buffer, psr_depth_buffer_t* depth_buffer, psr_float3_t pos0, psr_float3_t pos1, psr_float3_t pos2, psr_byte3_t color);
 
-void psr_raster_image(psr_color_buffer_t* color_buffer, psr_image_t image, int x, int y, int sx, int sy, int sw, int sh);
+void psr_raster_image(psr_color_buffer_t* color_buffer, psr_image_t image, psr_rect_t src, psr_rect_t dst);
+
+void psr_raster_text(psr_color_buffer_t* color_buffer, char* text, psr_int2_t pos, psr_image_t font, int original_size, int size, psr_char_draw_callback on_char_draw, void* user_data);
 
 // Asset I/O.
 
