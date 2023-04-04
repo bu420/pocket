@@ -1,6 +1,15 @@
 #ifndef PSR_H
 #define PSR_H
 
+#define PSR_ARITHMETIC(out, a, b, nr_elements, op)          \
+    for (int _i = 0; _i < nr_elements; _i++)                \
+        out.values[_i] = a.values[_i] op b.values[_i];
+
+#define PSR_ADD(out, a, b, nr_elements) PSR_ARITHMETIC(out, a, b, nr_elements, +)
+#define PSR_SUB(out, a, b, nr_elements) PSR_ARITHMETIC(out, a, b, nr_elements, -)
+#define PSR_MUL(out, a, b, nr_elements) PSR_ARITHMETIC(out, a, b, nr_elements, *)
+#define PSR_DIV(out, a, b, nr_elements) PSR_ARITHMETIC(out, a, b, nr_elements, /)
+
 typedef unsigned char psr_byte_t;
 
 typedef union {
@@ -98,13 +107,10 @@ typedef struct {
 } psr_depth_buffer_t;
 
 typedef enum {
-    // 16bit.
     PSR_R5G6B5      = 1 << 0,
-    PSR_A1R5G5B5    = 1 << 1, 
-    // 24bit.
+    PSR_R5G5B5A1    = 1 << 1, 
     PSR_R8G8B8      = 1 << 2,
-    // 32bit.
-    PSR_A8R8G8B8    = 1 << 3
+    PSR_R8G8B8A8    = 1 << 3
 } psr_color_depth_t;
 
 typedef struct {
@@ -121,32 +127,21 @@ typedef struct {
 
 typedef struct {
     psr_float3_t* positions;
-    psr_float2_t* tex_coords;
-    psr_float3_t* normals;
-    psr_face_t* faces;
     int position_count;
+    psr_float2_t* tex_coords;
     int tex_coord_count;
+    psr_float3_t* normals;
     int normal_count;
+    psr_face_t* faces;
     int face_count;
 } psr_mesh_t;
 
-typedef struct {
-    psr_rect_t src;
-    psr_int2_t offset;
-    int x_advance;
-} psr_character_info_t;
-
-typedef psr_character_info_t (*psr_char_draw_callback)(int c, void* user_data);
+typedef struct psr_font_t psr_font_t;
 
 psr_float3_t psr_normalize(psr_float3_t f);
 psr_float3_t psr_cross(psr_float3_t a, psr_float3_t b);
 float psr_dot(psr_float3_t a, psr_float3_t b);
 psr_byte3_t psr_byte3_lerp(psr_byte3_t a, psr_byte3_t b, float amount);
-
-psr_float3_t psr_float3_add(psr_float3_t a, psr_float3_t b);
-psr_float3_t psr_float3_sub(psr_float3_t a, psr_float3_t b);
-psr_float3_t psr_float3_mul(psr_float3_t a, psr_float3_t b);
-psr_float3_t psr_float3_div(psr_float3_t a, psr_float3_t b);
 
 // Matrix.
 
@@ -170,27 +165,26 @@ psr_mat3_t psr_mat4_to_mat3(psr_mat4_t m);
 
 psr_mat4_t psr_look_at(psr_float3_t pos, psr_float3_t target, psr_float3_t up);
 psr_mat4_t psr_perspective(float aspect, float fov, float near, float far);
-// TODO: add orthographic projection.
+psr_mat4_t psr_ortho();
 
 // Buffer.
 
-void psr_color_buffer_init(psr_color_buffer_t* color_buffer, int w, int h);
-void psr_color_buffer_free(psr_color_buffer_t* color_buffer);
+psr_color_buffer_t* psr_color_buffer_create(int w, int h);
+void psr_color_buffer_destroy(psr_color_buffer_t* color_buffer);
 psr_byte3_t* psr_color_buffer_at(psr_color_buffer_t* color_buffer, int x, int y);
 void psr_color_buffer_clear(psr_color_buffer_t* color_buffer, psr_byte3_t color);
-void psr_depth_buffer_init(psr_depth_buffer_t* depth_buffer, int w, int h);
-void psr_depth_buffer_free(psr_depth_buffer_t* depth_buffer);
+
+psr_depth_buffer_t* psr_depth_buffer_create(int w, int h);
+void psr_depth_buffer_destroy(psr_depth_buffer_t* depth_buffer);
 float* psr_depth_buffer_at(psr_depth_buffer_t* depth_buffer, int x, int y);
 void psr_depth_buffer_clear(psr_depth_buffer_t* depth_buffer);
 
 // Image.
 
-void psr_image_init(psr_image_t* image, psr_color_depth_t color_depth, int w, int h);
-void psr_image_free(psr_image_t* image);
+psr_image_t* psr_image_create(psr_color_depth_t color_depth, int w, int h);
+void psr_image_destroy(psr_image_t* image);
 // Retuns the address of the first byte of the pixel.
 psr_byte_t* psr_image_at(psr_image_t* image, int x, int y);
-psr_image_t psr_image_copy(psr_image_t image);
-void psr_image_scale(psr_image_t* image, psr_int2_t new_size);
 
 // Raster.
 
@@ -202,17 +196,21 @@ void psr_raster_triangle_2d_callback(psr_color_buffer_t* color_buffer, psr_int2_
 
 void psr_raster_triangle_3d(psr_color_buffer_t* color_buffer, psr_depth_buffer_t* depth_buffer, psr_float3_t pos0, psr_float3_t pos1, psr_float3_t pos2, psr_byte3_t color);
 
-void psr_raster_image(psr_color_buffer_t* color_buffer, psr_image_t image, psr_rect_t src, psr_rect_t dst);
+void psr_raster_image(psr_color_buffer_t* color_buffer, psr_image_t* image, psr_rect_t src, psr_rect_t dst);
 
-void psr_raster_text(psr_color_buffer_t* color_buffer, char* text, psr_int2_t pos, psr_image_t font, int original_size, int size, psr_char_draw_callback on_char_draw, void* user_data);
+void psr_raster_text(psr_color_buffer_t* color_buffer, char* text, psr_int2_t pos, psr_font_t* font, int original_size, int size);
 
 // Asset I/O.
 
-psr_image_t psr_load_bmp(char* path, psr_color_depth_t color_depth);
-void psr_save_bmp(char* path, psr_color_buffer_t color_buffer);
-// Very basic OBJ loader.
-// @return 0 on failure to open file and -1 on bad model.
-int psr_load_obj(char* path, psr_mesh_t* mesh);
+psr_image_t* psr_image_load_bmp(char* path, psr_color_depth_t color_depth);
+
+void psr_save_bmp(char* path, psr_color_buffer_t* color_buffer);
+
+psr_mesh_t* psr_mesh_load_obj(char* path);
 void psr_mesh_free(psr_mesh_t* mesh);
+
+// Parse AngelCode's bitmap font information.
+psr_font_t* psr_font_create(psr_image_t* image, char* info_path);
+void psr_font_destroy(psr_font_t* font);
 
 #endif

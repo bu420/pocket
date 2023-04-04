@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-typedef struct pwa_window pwa_window_t;
+typedef struct pwa_window_t pwa_window_t;
 
 typedef struct {
     // Row-major. RGB (0x00RRGGBB).

@@ -17,29 +17,21 @@ pwa_pixel_buffer_t on_draw(void* user_data) {
 }
 
 void on_key_down(int key_code, void* user_data) {
-    // Press space to pause animation!
+    // Hit space to pause/play animation.
     if (key_code == ' ') {
         pause_flag = !pause_flag;
     }
 }
 
 int main() {
-    psr_mesh_t mesh;
-    int result = psr_load_obj("bullfrog.obj", &mesh);
-    if (result == 0) {
-        printf("Failed to load model.\n");
-        return -1;
-    }
-    else if (result == -1) {
-        printf("Bad model.");
+    psr_mesh_t* mesh = psr_mesh_load_obj("bullfrog.obj");
+    if (!mesh) {
+        printf("Model error.\n");
         return -1;
     }
 
-    psr_color_buffer_t color_buffer;
-    psr_color_buffer_init(&color_buffer, WIDTH, HEIGHT);
-
-    psr_depth_buffer_t depth_buffer;
-    psr_depth_buffer_init(&depth_buffer, WIDTH, HEIGHT);
+    psr_color_buffer_t* color_buffer = psr_color_buffer_create(WIDTH, HEIGHT);
+    psr_depth_buffer_t* depth_buffer = psr_depth_buffer_create(WIDTH, HEIGHT);
 
     pwa_pixel_buffer_t pixel_buffer;
     pixel_buffer.pixels = malloc(WIDTH * HEIGHT * sizeof(uint32_t));
@@ -75,7 +67,7 @@ int main() {
             spin_animation += delta * M_PI / 1000;
         }
 
-        psr_depth_buffer_clear(&depth_buffer);
+        psr_depth_buffer_clear(depth_buffer);
 
         // Gradient background.
         for (int y = 0; y < HEIGHT; y++) {
@@ -83,7 +75,7 @@ int main() {
             static psr_byte3_t bottom = {20, 20, 20};
 
             for (int x = 0; x < WIDTH; x++) {
-                *psr_color_buffer_at(&color_buffer, x, y) = psr_byte3_lerp(top, bottom, (float)y / HEIGHT);
+                *psr_color_buffer_at(color_buffer, x, y) = psr_byte3_lerp(top, bottom, (float)y / HEIGHT);
             }
         }
 
@@ -98,18 +90,22 @@ int main() {
         psr_mat3_t normal_matrix = psr_mat4_to_mat3(psr_mat4_transpose(psr_mat4_inverse(model)));
 
         // Make a copy of the mesh's positions to preserve the original mesh.
-        psr_float3_t* positions = malloc(mesh.position_count * sizeof(psr_float3_t));
-        memcpy(positions, mesh.positions, mesh.position_count * sizeof(psr_float3_t));
+        psr_float3_t* positions = malloc(mesh->position_count * sizeof(psr_float3_t));
+        memcpy(positions, mesh->positions, mesh->position_count * sizeof(psr_float3_t));
 
-        int* face_cull_flags = malloc(mesh.face_count * sizeof(int));
+        int* face_cull_flags = malloc(mesh->face_count * sizeof(int));
 
         // Backface culling.
-        for (int i = 0; i < mesh.face_count; i++) {
+        for (int i = 0; i < mesh->face_count; i++) {
             // Pick any one of the triangle's points, put it in model space and check if the triangle should be culled.
             
-            psr_float3_t any_point_on_triangle = psr_float3_mul_mat4(positions[mesh.faces[i].position_indices[0]], model);
-            psr_float3_t direction_towards_point = psr_normalize(psr_float3_sub(any_point_on_triangle, camera_pos));
-            psr_float3_t normal = psr_float3_mul_mat3(mesh.normals[mesh.faces[i].normal_indices[0]], normal_matrix);
+            psr_float3_t any_point_on_triangle = psr_float3_mul_mat4(positions[mesh->faces[i].position_indices[0]], model);
+            
+            psr_float3_t direction_towards_point;
+            PSR_SUB(direction_towards_point, any_point_on_triangle, camera_pos, 3);
+            direction_towards_point = psr_normalize(direction_towards_point);
+            
+            psr_float3_t normal = psr_float3_mul_mat3(mesh->normals[mesh->faces[i].normal_indices[0]], normal_matrix);
 
             if (psr_dot(direction_towards_point, normal) >= 0) {
                 face_cull_flags[i] = 1;
@@ -120,7 +116,7 @@ int main() {
         }
 
         // Model/view/projection transform and viewport scaling.
-        for (int i = 0; i < mesh.position_count; i++) {
+        for (int i = 0; i < mesh->position_count; i++) {
             positions[i] = psr_float3_mul_mat4(positions[i], mvp);
 
             // Scale from [-1, 1] to viewport size.
@@ -129,17 +125,17 @@ int main() {
         }
 
         // Render triangles.
-        for (int i = 0; i < mesh.face_count; i++) {
+        for (int i = 0; i < mesh->face_count; i++) {
             if (face_cull_flags[i]) {
                 continue;
             }
 
             psr_float3_t tri[3];
             for (int j = 0; j < 3; j++) {
-                tri[j] = positions[mesh.faces[i].position_indices[j]];
+                tri[j] = positions[mesh->faces[i].position_indices[j]];
             }
 
-            psr_float3_t normal = psr_float3_mul_mat3(mesh.normals[mesh.faces[i].normal_indices[0]], normal_matrix);
+            psr_float3_t normal = psr_float3_mul_mat3(mesh->normals[mesh->faces[i].normal_indices[0]], normal_matrix);
 
             psr_float3_t light_dir = {1, 0, 0};
             float light = psr_dot(normal, light_dir);
@@ -148,7 +144,7 @@ int main() {
             }
             psr_byte3_t color = {255 * light, 255 * light, 255 * light};
             
-            psr_raster_triangle_3d(&color_buffer, &depth_buffer, tri[0], tri[1], tri[2], color);
+            psr_raster_triangle_3d(color_buffer, depth_buffer, tri[0], tri[1], tri[2], color);
         }
 
         free(face_cull_flags);
@@ -157,7 +153,7 @@ int main() {
         // Copy color buffer into pixel buffer.
         for (int x = 0; x < WIDTH; x++) {
             for (int y = 0; y < HEIGHT; y++) {
-                psr_byte3_t color = *psr_color_buffer_at(&color_buffer, x, y);
+                psr_byte3_t color = *psr_color_buffer_at(color_buffer, x, y);
                 pixel_buffer.pixels[y * WIDTH + x] = (color.r << 16) | (color.g << 8) | (color.b);
             }
         }

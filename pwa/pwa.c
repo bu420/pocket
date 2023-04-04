@@ -6,7 +6,7 @@
 
 #define PWA_WINDOW_CLASS_NAME "PWA Window Class"
 
-struct pwa_window {
+struct pwa_window_t {
     HWND hwnd;
     int should_close;
     pwa_resize_callback on_resize;
