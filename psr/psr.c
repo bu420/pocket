@@ -670,7 +670,6 @@ void psr_raster_text(psr_color_buffer_t* color_buffer, char* text, psr_int2_t po
     for (size_t i = 0; i < strlen(text); i++) {
         _psr_char_info_t info = font->char_infos[(int)text[i]];
 
-        psr_rect_t src = info.src;
         psr_rect_t dst = {pos.x + info.offset.x * scale, pos.y + info.offset.y * scale, info.src.w * scale, info.src.h * scale};
         psr_raster_image(color_buffer, font->image, info.src, dst);
 

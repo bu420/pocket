@@ -93,7 +93,7 @@ void pwa_window_schedule_redraw(pwa_window_t* window) {
 double pwa_get_elapsed_time_ms() {
     LARGE_INTEGER elapsed_time;
     QueryPerformanceCounter(&elapsed_time);
-    return elapsed_time.QuadPart * 1000. / pwa_get_ticks_per_second();
+    return (double)(elapsed_time.QuadPart * 1000000 / pwa_get_ticks_per_second()) / 1000;
 }
 
 int64_t pwa_get_ticks_per_second() {

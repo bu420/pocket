@@ -56,12 +56,21 @@ int main() {
 
     float last_frame = pwa_get_elapsed_time_ms();
 
+    const int gui_delta_interval = 500;
+    double gui_delta_last = pwa_get_elapsed_time_ms();
+    double gui_delta_value = 0;
+
     while (!pwa_window_should_close(window)) {
         pwa_window_poll_events(window);
 
-        float current_frame = pwa_get_elapsed_time_ms();
+        double current_frame = pwa_get_elapsed_time_ms();
         float delta = current_frame - last_frame;
         last_frame = current_frame;
+
+        if (current_frame > (gui_delta_last + gui_delta_interval)) {
+            gui_delta_last = current_frame;
+            gui_delta_value = delta;
+        }
 
         if (!pause_flag) {
             spin_animation += delta * M_PI / 1000;
@@ -150,7 +159,9 @@ int main() {
         free(face_cull_flags);
         free(positions);
 
-        psr_raster_text(color_buffer, "Frawg has commited 72 war crimes.", (psr_int2_t){10, 10}, font, 1);
+        char buf[24];
+        snprintf(buf, 32, "Frame: %.2fms", gui_delta_value);
+        psr_raster_text(color_buffer, buf, (psr_int2_t){10, 10}, font, 1);
 
         // Copy color buffer into pixel buffer.
         for (int x = 0; x < WIDTH; x++) {
