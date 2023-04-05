@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
 #define _USE_MATH_DEFINES
 #include <math.h>
 
@@ -24,11 +25,10 @@ void on_key_down(int key_code, void* user_data) {
 }
 
 int main() {
-    psr_mesh_t* mesh = psr_mesh_load_obj("bullfrog.obj");
-    if (!mesh) {
-        printf("Model error.\n");
-        return -1;
-    }
+    psr_mesh_t* mesh = psr_mesh_load_obj("../assets/bullfrog.obj");
+    assert(mesh);
+    psr_font_t* font = psr_font_load("../assets/font_dos_vga.bmp", "../assets/font_dos_vga.txt");
+    assert(font);
 
     psr_color_buffer_t* color_buffer = psr_color_buffer_create(WIDTH, HEIGHT);
     psr_depth_buffer_t* depth_buffer = psr_depth_buffer_create(WIDTH, HEIGHT);
@@ -149,6 +149,8 @@ int main() {
 
         free(face_cull_flags);
         free(positions);
+
+        psr_raster_text(color_buffer, "Frawg has commited 72 war crimes.", (psr_int2_t){10, 10}, font, 1);
 
         // Copy color buffer into pixel buffer.
         for (int x = 0; x < WIDTH; x++) {

@@ -198,7 +198,7 @@ void psr_raster_triangle_3d(psr_color_buffer_t* color_buffer, psr_depth_buffer_t
 
 void psr_raster_image(psr_color_buffer_t* color_buffer, psr_image_t* image, psr_rect_t src, psr_rect_t dst);
 
-void psr_raster_text(psr_color_buffer_t* color_buffer, char* text, psr_int2_t pos, psr_font_t* font, int original_size, int size);
+void psr_raster_text(psr_color_buffer_t* color_buffer, char* text, psr_int2_t pos, psr_font_t* font, int scale);
 
 // Asset I/O.
 
@@ -210,7 +210,7 @@ psr_mesh_t* psr_mesh_load_obj(char* path);
 void psr_mesh_free(psr_mesh_t* mesh);
 
 // Parse AngelCode's bitmap font information.
-psr_font_t* psr_font_create(psr_image_t* image, char* info_path);
+psr_font_t* psr_font_load(char* image_path, char* info_path);
 void psr_font_destroy(psr_font_t* font);
 
 #endif

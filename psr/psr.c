@@ -46,9 +46,9 @@ typedef struct {
 
 struct psr_font_t {
     psr_image_t* image;
-
     _psr_char_info_t* char_infos;
     int char_info_count;
+    int size;
 };
 
 psr_float3_t psr_normalize(psr_float3_t f) {
@@ -634,13 +634,15 @@ void psr_raster_triangle_3d(psr_color_buffer_t* color_buffer, psr_depth_buffer_t
     }
 }
 
-void psr_raster_image(psr_color_buffer_t* color_buffer, psr_image_t* image, psr_rect_t src, psr_rect_t dst) {
+void psr_raster_image(psr_color_buffer_t* color_buffer, psr_image_t* image, psr_rect_t src, psr_rect_t dst) {    
     psr_float2_t scale_factor = {src.w / (float)dst.w, src.h / (float)dst.h};
     
     for (int x = 0; x < dst.w; x++) {
         for (int y = 0; y < dst.h; y++) {
+            psr_int2_t sample = {src.x + (int)floorf(x * scale_factor.x), src.y + (int)floorf(y * scale_factor.y)};
+
+            psr_byte_t* src_pixel = psr_image_at(image, sample.x, sample.y);
             psr_byte3_t* dst_pixel = psr_color_buffer_at(color_buffer, dst.x + x, dst.y + y);
-            psr_byte_t* src_pixel = psr_image_at(image, src.x + (int)roundf(x * scale_factor.x), src.y + (int)roundf(y * scale_factor.y));
 
             switch (image->color_depth) {
             case PSR_R8G8B8:
@@ -664,18 +666,15 @@ void psr_raster_image(psr_color_buffer_t* color_buffer, psr_image_t* image, psr_
     }
 }
 
-void psr_raster_text(psr_color_buffer_t* color_buffer, char* text, psr_int2_t pos, psr_font_t* font, int original_size, int size) {   
-    float scale = size / (float)original_size;
-
-#define _SCALE(value) (int)roundf(value * scale)
-    
+void psr_raster_text(psr_color_buffer_t* color_buffer, char* text, psr_int2_t pos, psr_font_t* font, int scale) {       
     for (size_t i = 0; i < strlen(text); i++) {
         _psr_char_info_t info = font->char_infos[(int)text[i]];
 
-        psr_rect_t dst = {pos.x + _SCALE(info.offset.x), pos.y + _SCALE(info.offset.y), _SCALE(info.src.w), _SCALE(info.src.h)};
+        psr_rect_t src = info.src;
+        psr_rect_t dst = {pos.x + info.offset.x * scale, pos.y + info.offset.y * scale, info.src.w * scale, info.src.h * scale};
         psr_raster_image(color_buffer, font->image, info.src, dst);
 
-        pos.x += _SCALE(info.x_advance);
+        pos.x += info.x_advance * scale;
     }
 }
 
@@ -696,7 +695,7 @@ psr_image_t* psr_image_load_bmp(char* path, psr_color_depth_t color_depth) {
     int pixel_size = header[28] / 8;
     int padding_size = (4 - width * pixel_size % 4) % 4;
 
-    assert(pixel_size == _psr_pixel_size(color_depth) && "Incompatible color depth.");
+    assert(pixel_size == _psr_pixel_size(color_depth) && "Incompatible color depths.");
 
     psr_image_t* image = psr_image_create(color_depth, width, height);
 
@@ -707,7 +706,7 @@ psr_image_t* psr_image_load_bmp(char* path, psr_color_depth_t color_depth) {
 
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
-            int i = ((height - y) * (width + padding_size) + x) * pixel_size;
+            int i = ((height - 1 - y) * (width + padding_size) + x) * pixel_size;
 
             switch (color_depth) {
             case PSR_R8G8B8:
@@ -765,7 +764,7 @@ void psr_save_bmp(char* path, psr_color_buffer_t* color_buffer) {
 
     for (int y = 0; y < buf->h; y++) {
         for (int x = 0; x < buf->w; x++) {
-            int i = (buf->h - y) * buf->h + x;
+            int i = (buf->h - 1 - y) * buf->h + x;
             psr_byte3_t pixel = buf->data[i];
             psr_byte3_t color = {.r = pixel.b, .g = pixel.g, .b = pixel.r};
             fwrite(&color, 3, 1, file);
@@ -939,12 +938,16 @@ int _psr_parse_int(char* str) {
     return atoi(tokens[1]);
 }
 
-psr_font_t* psr_font_create(psr_image_t* image, char* info_path) {    
+psr_font_t* psr_font_load(char* image_path, char* info_path) {  
     psr_font_t* font = malloc(sizeof(psr_font_t));
     
-    font->image = image;
+    font->image = psr_image_load_bmp(image_path, PSR_R8G8B8A8);
+    if (!font->image) {
+        return NULL;
+    }
     font->char_info_count = 256;
     font->char_infos = malloc(256 * sizeof(_psr_char_info_t));
+    font->size = -1;
 
     for (int i = 0; i < 256; i++) {
         // ID 0 means there's no info about the current character.
@@ -971,8 +974,10 @@ psr_font_t* psr_font_create(psr_image_t* image, char* info_path) {
         // Split each line into words.
         char** words = _psr_split2(*line, " ");
 
-        // We only care about lines that start with "char".
-        if (strcmp(words[0], "char") == 0) {
+        if (strcmp(words[0], "info") == 0) {
+            font->size = _psr_parse_int(words[2]);
+        }
+        else if (strcmp(words[0], "char") == 0) {
             int id = _psr_parse_int(words[1]);
 
             if (id < 0 || id >= 256) {
@@ -993,6 +998,7 @@ psr_font_t* psr_font_create(psr_image_t* image, char* info_path) {
 }
 
 void psr_font_destroy(psr_font_t* font) {
+    psr_image_destroy(font->image);
     free(font->char_infos);
     free(font);
     font = NULL;
