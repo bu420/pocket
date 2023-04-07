@@ -27,7 +27,9 @@ void on_key_down(int key_code, void* user_data) {
 int main() {
     psr_mesh_t* mesh = psr_mesh_load_obj("../assets/bullfrog.obj");
     assert(mesh);
-    psr_font_t* font = psr_font_load("../assets/font_dos_vga.bmp", "../assets/font_dos_vga.txt");
+    psr_image_t* font_img = psr_image_load_bmp("../assets/font_dos_vga.bmp", PSR_R8G8B8A8);
+    assert(font_img);
+    psr_font_t* font = psr_font_load(font_img, "../assets/font_dos_vga.txt");
     assert(font);
 
     psr_color_buffer_t* color_buffer = psr_color_buffer_create(WIDTH, HEIGHT);

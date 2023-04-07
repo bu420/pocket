@@ -1,6 +1,8 @@
 #ifndef PSR_H
 #define PSR_H
 
+#define PSR_SWAP(type, a, b) { type _temp = a; a = b; b = _temp; }
+
 #define PSR_ARITHMETIC(out, a, b, nr_elements, op)          \
     for (int _i = 0; _i < nr_elements; _i++)                \
         out.values[_i] = a.values[_i] op b.values[_i];
@@ -141,6 +143,7 @@ typedef struct psr_font_t psr_font_t;
 psr_float3_t psr_normalize(psr_float3_t f);
 psr_float3_t psr_cross(psr_float3_t a, psr_float3_t b);
 float psr_dot(psr_float3_t a, psr_float3_t b);
+float psr_lerp(float a, float b, float amount);
 psr_byte3_t psr_byte3_lerp(psr_byte3_t a, psr_byte3_t b, float amount);
 
 // Matrix.
@@ -210,7 +213,7 @@ psr_mesh_t* psr_mesh_load_obj(char* path);
 void psr_mesh_free(psr_mesh_t* mesh);
 
 // Parse AngelCode's bitmap font information.
-psr_font_t* psr_font_load(char* image_path, char* info_path);
+psr_font_t* psr_font_load(psr_image_t* image, char* info_path);
 void psr_font_destroy(psr_font_t* font);
 
 #endif
