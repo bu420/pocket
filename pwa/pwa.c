@@ -1,4 +1,4 @@
-#include "pwa.h"
+#include "pwa/pwa.h"
 
 #include <windows.h>
 #include <stdlib.h>
@@ -8,11 +8,16 @@
 
 struct pwa_window_t {
     HWND hwnd;
-    int should_close;
+    bool should_close;
+
     pwa_resize_callback on_resize;
-    pwa_draw_callback on_draw;
     pwa_key_down_callback on_key_down;
     pwa_key_up_callback on_key_up;
+
+    int buffer_w;
+    int buffer_h;
+    uint32_t* buffer;
+
     void* user_data;
 };
 
@@ -38,11 +43,13 @@ pwa_window_t* pwa_window_create(char* title, int w, int h, void* user_data) {
 
     pwa_window_t* window = malloc(sizeof(pwa_window_t));
     window->hwnd = hwnd;
-    window->should_close = 0;
+    window->should_close = false;
     window->on_resize = NULL;
-    window->on_draw = NULL;
     window->on_key_down = NULL;
     window->on_key_up = NULL;
+    window->buffer_w = 0;
+    window->buffer_h = 0;
+    window->buffer = NULL;
     window->user_data = user_data;
     SetWindowLongPtr(hwnd, 0, (LONG_PTR)window);
 
@@ -54,16 +61,16 @@ pwa_window_t* pwa_window_create(char* title, int w, int h, void* user_data) {
 }
 
 void pwa_window_destroy(pwa_window_t* window) {
+    if (window->buffer) {
+        free(window->buffer);
+    }
+
     free(window);
     window = NULL;
 }
 
 void pwa_window_set_resize_callback(pwa_window_t* window, pwa_resize_callback on_resize) {
     window->on_resize = on_resize;
-}
-
-void pwa_window_set_draw_callback(pwa_window_t* window, pwa_draw_callback on_draw) {
-    window->on_draw = on_draw;
 }
 
 void pwa_window_set_key_down_callback(pwa_window_t* window, pwa_key_down_callback on_key_down) {
@@ -74,7 +81,7 @@ void pwa_window_set_key_up_callback(pwa_window_t* window, pwa_key_up_callback on
     window->on_key_up = on_key_up;
 }
 
-int pwa_window_should_close(pwa_window_t* window) {
+bool pwa_window_should_close(pwa_window_t* window) {
     return window->should_close;
 }
 
@@ -83,6 +90,27 @@ void pwa_window_poll_events(pwa_window_t* window) {
     while (PeekMessage(&msg, window->hwnd, 0, 0, PM_REMOVE)) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
+    }
+}
+
+void pwa_window_swap_buffers(pwa_window_t* window, psr_color_buffer_t* color_buffer) {
+    bool resize = (color_buffer->w != window->buffer_w || color_buffer->h != window->buffer_h);
+    
+    if (resize) {
+        free(window->buffer);
+    }
+
+    if (!window->buffer || resize) {
+        window->buffer_w = color_buffer->w;
+        window->buffer_h = color_buffer->h;
+        window->buffer = malloc(color_buffer->w * color_buffer->h * sizeof(uint32_t));
+    }
+
+    for (int x = 0; x < color_buffer->w; x++) {
+        for (int y = 0; y < color_buffer->h; y++) {
+            psr_byte3_t color = *psr_color_buffer_at(color_buffer, x, y);
+            window->buffer[y * color_buffer->w + x] = (color.r << 16) | (color.g << 8) | (color.b);
+        }
     }
 }
 
@@ -127,7 +155,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     switch (uMsg) {
     case WM_CLOSE:
         if (window) {
-            window->should_close = 1;
+            window->should_close = true;
         }
         return 0;
 
@@ -135,18 +163,16 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
         
-        if (window && window->on_draw) {
-            pwa_pixel_buffer_t buffer = window->on_draw(window->user_data);
-
+        if (window) {
             BITMAPINFO bmi = {0};
             bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-            bmi.bmiHeader.biWidth = buffer.w;
-            bmi.bmiHeader.biHeight = -buffer.h;
+            bmi.bmiHeader.biWidth = window->buffer_w;
+            bmi.bmiHeader.biHeight = -window->buffer_h;
             bmi.bmiHeader.biPlanes = 1;
             bmi.bmiHeader.biBitCount = 32;
             bmi.bmiHeader.biCompression = BI_RGB;
 
-            StretchDIBits(hdc, 0, 0, buffer.w, buffer.h, 0, 0, buffer.w, buffer.h, buffer.pixels, &bmi, DIB_RGB_COLORS, SRCCOPY);
+            StretchDIBits(hdc, 0, 0, window->buffer_w, window->buffer_h, 0, 0, window->buffer_w, window->buffer_h, window->buffer, &bmi, DIB_RGB_COLORS, SRCCOPY);
         }
         else {
             FillRect(hdc, &ps.rcPaint, (HBRUSH)(COLOR_WINDOW + 1));

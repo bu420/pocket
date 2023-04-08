@@ -1,5 +1,5 @@
-#include <psr.h>
-#include <pwa.h>
+#include <psr/psr.h>
+#include <pwa/pwa.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -12,10 +12,6 @@
 
 int pause_flag = 0;
 float spin_animation = 0;
-
-pwa_pixel_buffer_t on_draw(void* user_data) {
-    return *(pwa_pixel_buffer_t*)user_data;
-}
 
 void on_key_down(int key_code, void* user_data) {
     // Hit space to pause/play animation.
@@ -35,20 +31,14 @@ int main() {
     psr_color_buffer_t* color_buffer = psr_color_buffer_create(WIDTH, HEIGHT);
     psr_depth_buffer_t* depth_buffer = psr_depth_buffer_create(WIDTH, HEIGHT);
 
-    pwa_pixel_buffer_t pixel_buffer;
-    pixel_buffer.pixels = malloc(WIDTH * HEIGHT * sizeof(uint32_t));
-    pixel_buffer.w = WIDTH;
-    pixel_buffer.h = HEIGHT;
-
     pwa_init();
-    pwa_window_t* window = pwa_window_create("Spinning Model", WIDTH, HEIGHT, &pixel_buffer);
+    pwa_window_t* window = pwa_window_create("Spinning Model", WIDTH, HEIGHT, NULL);
 
     if (!window) {
         printf("Window error.\n");
         return -1;
     }
     
-    pwa_window_set_draw_callback(window, on_draw);
     pwa_window_set_key_down_callback(window, on_key_down);
 
     psr_float3_t camera_pos = {15, 15, -25};
@@ -162,17 +152,10 @@ int main() {
         free(positions);
 
         char buf[24];
-        snprintf(buf, 32, "Frame: %.2fms", gui_delta_value);
+        snprintf(buf, 24, "Frame: %.2fms", gui_delta_value);
         psr_raster_text(color_buffer, buf, (psr_int2_t){10, 10}, font, 1);
 
-        // Copy color buffer into pixel buffer.
-        for (int x = 0; x < WIDTH; x++) {
-            for (int y = 0; y < HEIGHT; y++) {
-                psr_byte3_t color = *psr_color_buffer_at(color_buffer, x, y);
-                pixel_buffer.pixels[y * WIDTH + x] = (color.r << 16) | (color.g << 8) | (color.b);
-            }
-        }
-
+        pwa_window_swap_buffers(window, color_buffer);
         pwa_window_schedule_redraw(window);
         pwa_print_last_error();
     }

@@ -174,11 +174,13 @@ psr_mat4_t psr_ortho();
 
 psr_color_buffer_t* psr_color_buffer_create(int w, int h);
 void psr_color_buffer_destroy(psr_color_buffer_t* color_buffer);
+void psr_color_buffer_resize(psr_color_buffer_t* color_buffer, int w, int h);
 psr_byte3_t* psr_color_buffer_at(psr_color_buffer_t* color_buffer, int x, int y);
 void psr_color_buffer_clear(psr_color_buffer_t* color_buffer, psr_byte3_t color);
 
 psr_depth_buffer_t* psr_depth_buffer_create(int w, int h);
 void psr_depth_buffer_destroy(psr_depth_buffer_t* depth_buffer);
+void psr_depth_buffer_resize(psr_depth_buffer_t* depth_buffer, int w, int h);
 float* psr_depth_buffer_at(psr_depth_buffer_t* depth_buffer, int x, int y);
 void psr_depth_buffer_clear(psr_depth_buffer_t* depth_buffer);
 

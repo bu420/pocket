@@ -1,4 +1,4 @@
-#include "psr.h"
+#include "psr/psr.h"
 
 #include <stdlib.h>
 #include <stdint.h>
@@ -371,6 +371,13 @@ void psr_color_buffer_destroy(psr_color_buffer_t* color_buffer) {
     color_buffer = NULL;
 }
 
+void psr_color_buffer_resize(psr_color_buffer_t* color_buffer, int w, int h) {
+    color_buffer->w = w;
+    color_buffer->h = h;
+    free(color_buffer->data);
+    color_buffer->data = malloc(w * h * sizeof(psr_byte3_t));
+}
+
 psr_byte3_t* psr_color_buffer_at(psr_color_buffer_t* color_buffer, int x, int y) {
     return &color_buffer->data[y * color_buffer->w + x];
 }
@@ -393,6 +400,13 @@ void psr_depth_buffer_destroy(psr_depth_buffer_t* depth_buffer) {
     free(depth_buffer->data);
     free(depth_buffer);
     depth_buffer = NULL;
+}
+
+void psr_depth_buffer_resize(psr_depth_buffer_t* depth_buffer, int w, int h) {
+    depth_buffer->w = w;
+    depth_buffer->h = h;
+    free(depth_buffer->data);
+    depth_buffer->data = malloc(w * h * sizeof(float));
 }
 
 float* psr_depth_buffer_at(psr_depth_buffer_t* depth_buffer, int x, int y) {
