@@ -1,5 +1,15 @@
-# pocket-collection
-A collection of small (hence *pocket*) and simple C libraries with examples.
+# Pocket
 
-- `psr` (pocket software rasterizer): A small 2D/3D software rasterizer.
-- `pwa` (pocket windows abstraction): A small Microsoft Windows abstraction.
+> :warning: *Work-in-progress!*
+
+A tiny graphics framework written in C with no external dependencies.
+
+- psr
+  - 2D/3D software rasterizer
+  - Support for triangle, line and bitmap font rasterization
+- pwa
+  - Microsoft Windows abstraction
+  - Windowing and input
+  - High precision time measuring
+
+![Bullfrog](examples/assets/readme_bullfrog.png "Bullfrog")
