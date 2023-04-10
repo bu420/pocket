@@ -14,11 +14,17 @@ A tiny graphics framework.
   - Measure time with microsecond precision
 
 ## How to use
-Just include the headers and compile the source files. If you compile `pwa.c` you must also link against `gdi32`.
+Just include the headers and compile the source files. If you use `pwa.c` you must also link against `gdi32`.
 
 For example:
 ```
 gcc my_program.c psr.c pwa.c -lgdi32 -o my_program
+```
+
+To compile the examples run:
+```
+cd examples
+make all
 ```
 
 ## Screenshots
