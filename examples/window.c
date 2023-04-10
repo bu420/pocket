@@ -1,5 +1,5 @@
-#include <psr/psr.h>
-#include <pwa/pwa.h>
+#include <psr.h>
+#include <pwa.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
@@ -49,7 +49,6 @@ int main() {
         }
 
         pwa_window_swap_buffers(window, color_buffer);
-        pwa_window_schedule_redraw(window);
     }
 
     pwa_window_destroy(window);

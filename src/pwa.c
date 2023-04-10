@@ -1,4 +1,4 @@
-#include "pwa/pwa.h"
+#include "pwa.h"
 
 #include <windows.h>
 #include <stdlib.h>
@@ -112,9 +112,8 @@ void pwa_window_swap_buffers(pwa_window_t* window, psr_color_buffer_t* color_buf
             window->buffer[y * color_buffer->w + x] = (color.r << 16) | (color.g << 8) | (color.b);
         }
     }
-}
 
-void pwa_window_schedule_redraw(pwa_window_t* window) {
+    // Trigger redraw.
     InvalidateRect(window->hwnd, NULL, FALSE);
 }
 

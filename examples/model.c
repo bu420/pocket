@@ -1,5 +1,5 @@
-#include <psr/psr.h>
-#include <pwa/pwa.h>
+#include <psr.h>
+#include <pwa.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -21,11 +21,11 @@ void on_key_down(int key_code, void* user_data) {
 }
 
 int main() {
-    psr_mesh_t* mesh = psr_mesh_load_obj("../assets/bullfrog.obj");
+    psr_mesh_t* mesh = psr_mesh_load_obj("assets/bullfrog.obj");
     assert(mesh);
-    psr_image_t* font_img = psr_image_load_bmp("../assets/font_dos_vga.bmp", PSR_R8G8B8A8);
+    psr_image_t* font_img = psr_image_load_bmp("assets/font_dos_vga.bmp", PSR_R8G8B8A8);
     assert(font_img);
-    psr_font_t* font = psr_font_load(font_img, "../assets/font_dos_vga.txt");
+    psr_font_t* font = psr_font_load(font_img, "assets/font_dos_vga.txt");
     assert(font);
 
     psr_color_buffer_t* color_buffer = psr_color_buffer_create(WIDTH, HEIGHT);
@@ -156,8 +156,6 @@ int main() {
         psr_raster_text(color_buffer, buf, (psr_int2_t){10, 10}, font, 1);
 
         pwa_window_swap_buffers(window, color_buffer);
-        pwa_window_schedule_redraw(window);
-        pwa_print_last_error();
     }
 
     pwa_window_destroy(window);

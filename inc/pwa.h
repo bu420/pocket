@@ -1,7 +1,7 @@
 #ifndef PWA_H
 #define PWA_H
 
-#include <psr/psr.h>
+#include <psr.h>
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -21,7 +21,6 @@ void pwa_window_set_key_up_callback(pwa_window_t* window, pwa_key_up_callback on
 bool pwa_window_should_close(pwa_window_t* window);
 void pwa_window_poll_events(pwa_window_t* window);
 void pwa_window_swap_buffers(pwa_window_t* window, psr_color_buffer_t* color_buffer);
-void pwa_window_schedule_redraw(pwa_window_t* window);
 
 double pwa_get_elapsed_time_ms();
 int64_t pwa_get_ticks_per_second();

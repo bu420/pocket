@@ -1,4 +1,4 @@
-#include "psr/psr.h"
+#include "psr.h"
 
 #include <stdlib.h>
 #include <stdint.h>

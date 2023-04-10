@@ -1,5 +1,6 @@
 #include <psr.h>
 #include <pwa.h>
+#include <stdlib.h>
 #define _USE_MATH_DEFINES
 #include <math.h>
 
@@ -28,10 +29,6 @@ int lvl_idx(int x, int y, int z) {
     return z * 256 + y * 16 + x;
 }
 
-pwa_pixel_buffer_t on_draw(void* user_data) {
-    return *(pwa_pixel_buffer_t*)user_data;
-}
-
 int main(int argc, char** argv) {
     pwa_init();
 
@@ -44,16 +41,10 @@ int main(int argc, char** argv) {
         level[i] = 1;
     }
 
-    psr_float3_t pos = {-32, -24, -32};
+    psr_float3_t pos = {-8, -10, -8};
     psr_mat4_t projection = psr_perspective(HEIGHT / (float)WIDTH, 70 * (M_PI / 180), .1f, 1000.f);
 
-    pwa_pixel_buffer_t buffer;
-    buffer.pixels = malloc(WIDTH * HEIGHT * sizeof(uint32_t));
-    buffer.w = WIDTH;
-    buffer.h = HEIGHT;
-
-    pwa_window_t* window = pwa_window_create("Minecraft", WIDTH, HEIGHT, &buffer);
-    pwa_window_set_draw_callback(window, on_draw);
+    pwa_window_t* window = pwa_window_create("Minecraft", WIDTH, HEIGHT, NULL);
 
     while (!pwa_window_should_close(window)) {
         pwa_window_poll_events(window);
@@ -98,27 +89,19 @@ int main(int argc, char** argv) {
                             norm.values[j] = cube_vertex_normals[(i / 2) * 3 + j];
                         }
 
-                        psr_float3_t light_dir = psr_normalize((psr_float3_t){0, 1, .5});
+                        psr_float3_t light_dir = {-1, .7, .5};
                         float light = psr_dot(norm, light_dir);
+                        if (light > 0) {
+                            light = 0;
+                        }
                         psr_byte3_t color = {255 * light, 255 * light, 255 * light};
 
-
-                        psr_raster_triangle_2d_color(color_buffer, (psr_int2_t){(int)tri[0].x, (int)tri[0].y}, (psr_int2_t){(int)tri[1].x, (int)tri[1].y}, (psr_int2_t){(int)tri[2].x, (int)tri[2].y}, color);
+                        psr_raster_triangle_3d(color_buffer, depth_buffer, tri[0], tri[1], tri[2], color);
                     }
                 }
             }
         }
 
-        // Copy color buffer to window buffer.
-        for (int x = 0; x < WIDTH; x++) {
-            for (int y = 0; y < HEIGHT; y++) {
-                psr_byte3_t color = *psr_color_buffer_at(color_buffer, x, y);
-                uint32_t* pixel = &buffer.pixels[y * WIDTH + x];
-                
-                *pixel = (*pixel & 0xffff00) | (color.b << 0);
-                *pixel = (*pixel & 0xff00ff) | (color.g << 8);
-                *pixel = (*pixel & 0x00ffff) | (color.r << 16);
-            }
-        }
+        pwa_window_swap_buffers(window, color_buffer);
     }
 }
