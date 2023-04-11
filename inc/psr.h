@@ -3,8 +3,8 @@
 
 #define PSR_SWAP(type, a, b) { type _temp = a; a = b; b = _temp; }
 
-#define PSR_ARITHMETIC(out, a, b, nr_elements, op)          \
-    for (int _i = 0; _i < nr_elements; _i++)                \
+#define PSR_ARITHMETIC(out, a, b, nr_elements, op)     \
+    for (int _i = 0; _i < nr_elements; _i++)           \
         out.values[_i] = a.values[_i] op b.values[_i];
 
 #define PSR_ADD(out, a, b, nr_elements) PSR_ARITHMETIC(out, a, b, nr_elements, +)
@@ -122,6 +122,25 @@ typedef struct {
 } psr_image_t;
 
 typedef struct {
+    psr_float4_t data;
+    // Float count, doesn't have to be 4 floats.
+    int float_count;
+} psr_vertex_attribute_t;
+
+typedef struct {
+    int x;
+    int y;
+    float z;
+
+    // Used in some calculations that require original "un-rounded" position.
+    float _x;
+    float _y;
+
+    psr_vertex_attribute_t* attributes;
+    int attribute_count;
+} psr_vertex_t;
+
+typedef struct {
     int position_indices[3];
     int tex_coord_indices[3];
     int normal_indices[3];
@@ -139,6 +158,10 @@ typedef struct {
 } psr_mesh_t;
 
 typedef struct psr_font_t psr_font_t;
+
+// No need to return number of vertex attributes since you should
+// know how many attributes you passed to the raster function.
+typedef psr_byte3_t (*psr_pixel_shader_callback)(psr_vertex_attribute_t* interpolated_attributes, void* user_data);
 
 psr_float3_t psr_normalize(psr_float3_t f);
 psr_float3_t psr_cross(psr_float3_t a, psr_float3_t b);
@@ -193,13 +216,9 @@ psr_byte_t* psr_image_at(psr_image_t* image, int x, int y);
 
 // Raster.
 
-void psr_raster_line(psr_color_buffer_t* color_buffer, psr_int2_t start, psr_int2_t end, psr_byte3_t start_color, psr_byte3_t end_color);
+psr_vertex_t psr_vertex_create(psr_float3_t pos, psr_vertex_attribute_t* attributes, int attribute_count);
 
-void psr_raster_triangle_2d_color(psr_color_buffer_t* color_buffer, psr_int2_t pos0, psr_int2_t pos1, psr_int2_t pos2, psr_byte3_t color);
-void psr_raster_triangle_2d_image(psr_color_buffer_t* color_buffer, psr_int2_t pos0, psr_int2_t pos1, psr_int2_t pos2);
-void psr_raster_triangle_2d_callback(psr_color_buffer_t* color_buffer, psr_int2_t pos0, psr_int2_t pos1, psr_int2_t pos2, void (*callback)(psr_int2_t pixel_pos), void* user_data);
-
-void psr_raster_triangle_3d(psr_color_buffer_t* color_buffer, psr_depth_buffer_t* depth_buffer, psr_float3_t pos0, psr_float3_t pos1, psr_float3_t pos2, psr_byte3_t color);
+void psr_raster_triangle_3d(psr_color_buffer_t* color_buffer, psr_depth_buffer_t* depth_buffer, psr_vertex_t v0, psr_vertex_t v1, psr_vertex_t v2, psr_pixel_shader_callback pixel_shader, void* user_data);
 
 void psr_raster_image(psr_color_buffer_t* color_buffer, psr_image_t* image, psr_rect_t src, psr_rect_t dst);
 

@@ -20,6 +20,10 @@ void on_key_down(int key_code, void* user_data) {
     }
 }
 
+psr_byte3_t pixel_shader(psr_vertex_attribute_t* attributes, void* user_data) {
+    return *(psr_byte3_t*)user_data;
+}
+
 int main() {
     psr_mesh_t* mesh = psr_mesh_load_obj("assets/bullfrog.obj");
     assert(mesh);
@@ -145,7 +149,12 @@ int main() {
             }
             psr_byte3_t color = {255 * light, 255 * light, 255 * light};
             
-            psr_raster_triangle_3d(color_buffer, depth_buffer, tri[0], tri[1], tri[2], color);
+            psr_raster_triangle_3d(
+                color_buffer, depth_buffer, 
+                psr_vertex_create(tri[0], NULL, 0), 
+                psr_vertex_create(tri[1], NULL, 0), 
+                psr_vertex_create(tri[2], NULL, 0), 
+                pixel_shader, &color);
         }
 
         free(face_cull_flags);
