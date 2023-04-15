@@ -8,19 +8,31 @@
 #include <assert.h>
 #include <stdbool.h>
 
-typedef struct {
-    psr_vertex_t start;
-    psr_vertex_t end;
-    psr_vertex_t* current;
+#define _PSR_ABS(x) ((x) < 0 ? -(x) : (x))
 
-    // Do not use this to plot pixels, use _psr_line_t::current instead.
-    psr_float2_t _current_pos;
+typedef enum {
+    PSR_LINE_INCREMENT_ANY,
+    PSR_LINE_INCREMENT_VERTICAL,
+    PSR_LINE_INCREMENT_HORIZONTAL
+} _psr_line_increment_type_t;
+
+typedef struct {
+    int attribute_count;
+
+    psr_attribute_array_t start;
+    psr_attribute_array_t end;
+    psr_attribute_array_t current;
+
+    _psr_line_increment_type_t increment_type;
+    psr_float4_t increments[PSR_MAX_ATTRIBUTES];
 
     int i;
-    int steps;
+    float steps;
 
-    psr_float3_t increment;
-    psr_float4_t* attribute_increments;
+    // Floating point positions are stored in the attribute arrays at index 0.
+    psr_int2_t start_pixel_pos;
+    psr_int2_t end_pixel_pos;
+    psr_int2_t current_pixel_pos;
 } _psr_line_t;
 
 typedef struct {
@@ -63,7 +75,15 @@ float psr_lerp(float a, float b, float amount) {
 psr_byte3_t psr_byte3_lerp(psr_byte3_t a, psr_byte3_t b, float amount) {
     psr_byte3_t result;
     for (int i = 0; i < 3; i++) {
-        result.values[i] = a.values[i] * (1 - amount) + b.values[i] * amount;
+        result.values[i] = (psr_byte_t)roundf(psr_lerp(a.values[i], b.values[i], amount));
+    }
+    return result;
+}
+
+psr_float3_t psr_float3_lerp(psr_float3_t a, psr_float3_t b, float amount) {
+    psr_float3_t result;
+    for (int i = 0; i < 3; i++) {
+        result.values[i] = psr_lerp(a.values[i], b.values[i], amount);
     }
     return result;
 }
@@ -421,7 +441,6 @@ void psr_depth_buffer_clear(psr_depth_buffer_t* depth_buffer) {
     }
 }
 
-// Bytes per pixel.
 int _psr_pixel_size(psr_color_depth_t color_depth) {
     switch (color_depth) {
     case PSR_R5G6B5:
@@ -470,223 +489,241 @@ psr_byte_t* psr_image_at(psr_image_t* image, int x, int y) {
     return &image->data[(y * image->w + x) * _psr_pixel_size(image->color_depth)];
 }
 
-// Remember to free return value.
-psr_vertex_t* _psr_vertex_copy(psr_vertex_t* src) {
-    psr_vertex_t* v = malloc(sizeof(psr_vertex_t));
+// "start" and "end" must each contain a 3d position at index 0.
+void _psr_line_create_3d(_psr_line_t* out, 
+                         const psr_attribute_array_t* start, 
+                         const psr_attribute_array_t* end, 
+                         int attribute_count,
+                         _psr_line_increment_type_t increment_type) {
+    assert(attribute_count >= 1 && attribute_count <= PSR_MAX_ATTRIBUTES);
+    out->attribute_count = attribute_count;
 
-    // Copy value fields.
-    memcpy(v, src, sizeof(psr_vertex_t));
+    assert(start->attributes[0].nr_of_floats == 3 && end->attributes[0].nr_of_floats == 3);
+    psr_float3_t start_pos = PSR_ATTRIB_TO_FLOAT3(start->attributes[0]);
+    psr_float3_t end_pos = PSR_ATTRIB_TO_FLOAT3(end->attributes[0]);
 
-    // Allocate memory for and copy attributes.
-    v->attributes = malloc(src->attribute_count * sizeof(psr_vertex_attribute_t));
-    memcpy(v->attributes, src->attributes, src->attribute_count * sizeof(psr_vertex_attribute_t));
-    
-    return v;
+    out->i = 0;
+    out->increment_type = increment_type;
+
+    psr_float2_t pos_delta = {end_pos.x - start_pos.x, end_pos.y - start_pos.y};
+
+    switch (increment_type) {
+    case PSR_LINE_INCREMENT_ANY:        out->steps = (_PSR_ABS(pos_delta.x) >= _PSR_ABS(pos_delta.y)) ? _PSR_ABS(pos_delta.x) : _PSR_ABS(pos_delta.y); break;
+    case PSR_LINE_INCREMENT_VERTICAL:   out->steps = _PSR_ABS(pos_delta.y); break;
+    case PSR_LINE_INCREMENT_HORIZONTAL: out->steps = _PSR_ABS(pos_delta.x); break;
+    default: assert(!"Non-reachable entry reached.");
+    }
+
+    memcpy(&out->start, start, sizeof(psr_attribute_array_t));
+    memcpy(&out->end, end, sizeof(psr_attribute_array_t));
+    memcpy(&out->current, &out->start, sizeof(psr_attribute_array_t));
+
+    // Setup attribute increments.
+    if (out->steps < 1) {
+        for (int i = 0; i < attribute_count; i++) {
+            out->increments[i] = out->start.attributes[i].data;
+        }
+    }
+    else {
+        for (int i = 0; i < attribute_count; i++) {
+            for (int j = 0; j < out->current.attributes[i].nr_of_floats; j++) {
+                float delta = end->attributes[i].data.values[j] - start->attributes[i].data.values[j];
+                out->increments[i].values[j] = delta / out->steps;
+            }
+        }
+    }
+
+    out->start_pixel_pos.x = (int)roundf(start_pos.x);
+    out->start_pixel_pos.y = (int)roundf(start_pos.y);
+    out->end_pixel_pos.x = (int)roundf(end_pos.x);
+    out->end_pixel_pos.y = (int)roundf(end_pos.y);
+    out->current_pixel_pos = out->start_pixel_pos;
 }
 
-_psr_line_t* _psr_line_create(psr_vertex_t start, psr_vertex_t end) {    
-    _psr_line_t* line = malloc(sizeof(_psr_line_t));
+void _psr_attributes_interpolate(psr_attribute_array_t* out, const psr_attribute_array_t* a, const psr_attribute_array_t* b, int attribute_count, float amount) {
+    assert(attribute_count <= PSR_MAX_ATTRIBUTES);
     
-    line->start = start;
-    line->end = end;
+    for (int i = 0; i < attribute_count; i++) {
+        assert(a->attributes[i].nr_of_floats == b->attributes[i].nr_of_floats);
 
-    line->current = _psr_vertex_copy(&start);
-
-    line->_current_pos.x = start._x;
-    line->_current_pos.y = start._y;
-
-    psr_int2_t delta = {end.x - start.x, end.y - start.y};
-
-    line->i = 0;
-    line->steps = (abs(delta.x) >= abs(delta.y)) ? abs(delta.x) : abs(delta.y);
-    line->increment.x = delta.x / (float)line->steps;
-    line->increment.y = delta.y / (float)line->steps;
-
-    return line;
-}
-
-void _psr_line_destroy(_psr_line_t* line) {
-    free(line->current->attributes);
-    free(line);
-    line = NULL;
+        for (int j = 0; j < a->attributes[i].nr_of_floats; j++) {
+            out->attributes[i].data.values[j] = psr_lerp(a->attributes[i].data.values[j], b->attributes[i].data.values[j], amount);
+            out->attributes[i].nr_of_floats = a->attributes[i].nr_of_floats;
+        }
+    }
 }
 
 bool _psr_line_step(_psr_line_t* line) {
-    if (line->i++ <= line->steps) {
-        // X, Y, Z increment.
-
-        line->_current_pos.x += line->increment.x;
-        line->_current_pos.y += line->increment.y;
-        line->current->z += line->increment.z;
-
-        line->current->x = (int)roundf(line->_current_pos.x);
-        line->current->y = (int)roundf(line->_current_pos.y);
-
-        // Vertex attributes increment.
-
-        for (int i = 0; i < line->current->attribute_count; i++) {
+    if (++line->i <= line->steps) {
+        for (int i = 0; i < line->attribute_count; i++) {
             PSR_ADD(
-                line->current->attributes[i].data, 
-                line->current->attributes[i].data, 
-                line->attribute_increments[i], 
-                line->current->attributes[i].float_count);            
+                line->current.attributes[i].data, 
+                line->current.attributes[i].data,
+                line->increments[i],
+                line->current.attributes[i].nr_of_floats);
         }
+
+        line->current_pixel_pos.x = (int)roundf(line->current.attributes[0].data.x);
+        line->current_pixel_pos.y = (int)roundf(line->current.attributes[0].data.y);
 
         return true;
     }
     return false;
 }
 
-bool _psr_line_step_until_vertical_difference(_psr_line_t* line) {
-    int y = line->current->y;
-
-    while (_psr_line_step(line)) {
-        if (line->current->y != y) {
-            return true;
-        }
-        y = line->current->y;
-    }
-    return false;
-}
-
-psr_vertex_t psr_vertex_create(psr_float3_t pos, psr_vertex_attribute_t* attributes, int attribute_count) {
-    psr_vertex_t v;
-    v.x = (int)roundf(pos.x);
-    v.y = (int)roundf(pos.y);
-    v._x = pos.x;
-    v._y = pos.y;
-    v.z = pos.z;
-    v.attributes = attributes;
-    v.attribute_count = attribute_count;
-    return v;
-}
-
-// Remember to free return value.
-psr_vertex_t* _psr_vertex_lerp(const psr_vertex_t* a, const psr_vertex_t* b, float amount) {
-    assert(a->attribute_count == b->attribute_count);
-
-    psr_vertex_t* v = malloc(sizeof(psr_vertex_t));
-    v->attributes = malloc(a->attribute_count * sizeof(psr_vertex_attribute_t));
-    v->attribute_count = a->attribute_count;
-    v->x = psr_lerp(a->x, b->x, amount);
-    v->y = psr_lerp(a->y, b->y, amount);
-    v->z = psr_lerp(a->z, b->z, amount);
-    v->_x = psr_lerp(a->_x, b->_x, amount);
-    v->_y = psr_lerp(a->_y, b->_y, amount);
-
-    for (int i = 0; i < a->attribute_count; i++) {
-        for (int j = 0; j < a->attributes[i].float_count; j++) {
-            v->attributes[i].data.values[j] = 
-                psr_lerp(
-                    a->attributes[i].data.values[j], 
-                    b->attributes[i].data.values[j], 
-                    amount);
-        }
-    }
-    return v;
-}
-
-void _psr_vertex_destroy(psr_vertex_t* v) {
-    free(v->attributes);
-    free(v);
-    v = NULL;
-}
-
-void _psr_raster_triangle_3d_flat_top_or_flat_bottom(psr_color_buffer_t* color_buffer, psr_depth_buffer_t* depth_buffer, _psr_line_t* line_a, _psr_line_t* line_b, psr_pixel_shader_callback pixel_shader, void* user_data) {
-    if (line_a->start.x > line_b->start.x || line_a->end.x > line_b->end.x) {
-        PSR_SWAP(_psr_line_t*, line_a, line_b);
+void _psr_raster_triangle_3d_flat_top_or_flat_bottom(psr_color_buffer_t* color_buffer, 
+                                                     psr_depth_buffer_t* depth_buffer,
+                                                     const psr_attribute_array_t* line_a_start_attribs,
+                                                     const psr_attribute_array_t* line_a_end_attribs,
+                                                     const psr_attribute_array_t* line_b_start_attribs,
+                                                     const psr_attribute_array_t* line_b_end_attribs,
+                                                     int attribute_count,
+                                                     psr_pixel_shader_callback pixel_shader, 
+                                                     void* user_data) {
+    _psr_line_t line_a;
+    _psr_line_create_3d(&line_a, line_a_start_attribs, line_a_end_attribs, attribute_count, PSR_LINE_INCREMENT_VERTICAL);
+    _psr_line_t line_b;
+    _psr_line_create_3d(&line_b, line_b_start_attribs, line_b_end_attribs, attribute_count, PSR_LINE_INCREMENT_VERTICAL);
+    
+    if (line_a.start_pixel_pos.x > line_b.start_pixel_pos.x || line_a.end_pixel_pos.x > line_b.end_pixel_pos.x) {
+        PSR_SWAP(_psr_line_t, line_a, line_b);
     }
     
-    for (int y = line_a->start.y; y <= line_a->end.y; y++) {
-        psr_vertex_t start = *line_a->current;
-        psr_vertex_t end = *line_b->current;
+    do {
+        assert(line_a.current_pixel_pos.y == line_b.current_pixel_pos.y);
 
-        for (int x = start.x; x <= end.x; x++) {
-            float how_far_along_are_we = (x - start._x) / (end._x - start._x + 1);
-            psr_vertex_t* interpolated = _psr_vertex_lerp(&start, &end, how_far_along_are_we);
+        // Create a horizontal line between line a and line b.
+        _psr_line_t line_x;
+        _psr_line_create_3d(&line_x, &line_a.current, &line_b.current, line_a.attribute_count, PSR_LINE_INCREMENT_HORIZONTAL);
+
+        do {
+            int x = line_x.current_pixel_pos.x;
+            int y = line_a.current_pixel_pos.y;
+            float z = line_x.current.attributes[0].data.z;
+
+            // Remove first attribute (position) from array.
+            psr_attribute_array_t interpolated;
+            for (int i = 0; i < line_x.attribute_count; i++) {
+                interpolated.attributes[i] = line_x.current.attributes[i + 1];
+            }
             
-            psr_byte3_t color = pixel_shader(interpolated->attributes, user_data);
+            psr_byte3_t color = pixel_shader(line_x.current_pixel_pos, &interpolated, user_data);
             
             if (depth_buffer) {
-                if (interpolated->z < *psr_depth_buffer_at(depth_buffer, x, y)) {
-                    *psr_depth_buffer_at(depth_buffer, x, y) = interpolated->z;
+                if (z < *psr_depth_buffer_at(depth_buffer, x, y)) {
+                    *psr_depth_buffer_at(depth_buffer, x, y) = z;
                     *psr_color_buffer_at(color_buffer, x, y) = color;
                 }
             }
             else {
                 *psr_color_buffer_at(color_buffer, x, y) = color;
             }
-
-            _psr_vertex_destroy(interpolated);
         }
-
-        _psr_line_step_until_vertical_difference(line_a);
-        _psr_line_step_until_vertical_difference(line_b);
+        while (_psr_line_step(&line_x));
     }
+    while (_psr_line_step(&line_a) && _psr_line_step(&line_b));
 }
 
-void psr_raster_triangle_3d(psr_color_buffer_t* color_buffer, psr_depth_buffer_t* depth_buffer, psr_vertex_t v0, psr_vertex_t v1, psr_vertex_t v2, psr_pixel_shader_callback pixel_shader, void* user_data) {
-    // Sort vertices by height.
-    if (v0.y > v1.y) {
-        PSR_SWAP(psr_vertex_t, v0, v1);
-    }
-    if (v0.y > v2.y) {
-        PSR_SWAP(psr_vertex_t, v0, v2);
-    }
-    if (v1.y > v2.y) {
-        PSR_SWAP(psr_vertex_t, v1, v2);
-    }
+void psr_raster_triangle_3d(psr_color_buffer_t* color_buffer, 
+                            psr_depth_buffer_t* depth_buffer, 
+                            psr_float3_t p0, 
+                            psr_float3_t p1, 
+                            psr_float3_t p2, 
+                            const psr_attribute_array_t* attributes0,
+                            const psr_attribute_array_t* attributes1,
+                            const psr_attribute_array_t* attributes2,
+                            int attribute_count,
+                            psr_pixel_shader_callback pixel_shader, 
+                            void* user_data) {
+    p0.x = roundf(p0.x);
+    p0.y = roundf(p0.y);
+    p1.x = roundf(p1.x);
+    p1.y = roundf(p1.y);
+    p2.x = roundf(p2.x);
+    p2.y = roundf(p2.y);
 
     // HACK: discard triangle if outside view.
-    if (v0.x < 0 || v0.x >= color_buffer->w || v0.y < 0 || v0.y >= color_buffer->h ||
-        v1.x < 0 || v1.x >= color_buffer->w || v1.y < 0 || v1.y >= color_buffer->h ||
-        v2.x < 0 || v2.x >= color_buffer->w || v2.y < 0 || v2.y >= color_buffer->h) {
+    if (p0.x < 0 || p0.x >= color_buffer->w || p0.y < 0 || p0.y >= color_buffer->h ||
+        p1.x < 0 || p1.x >= color_buffer->w || p1.y < 0 || p1.y >= color_buffer->h ||
+        p2.x < 0 || p2.x >= color_buffer->w || p2.y < 0 || p2.y >= color_buffer->h) {
         return;
     }
+    
+    // Sort vertices by height.
+    if (p0.y > p1.y) {
+        PSR_SWAP(psr_float3_t, p0, p1);
+        PSR_SWAP(const psr_attribute_array_t*, attributes0, attributes1);
+    }
+    if (p0.y > p2.y) {
+        PSR_SWAP(psr_float3_t, p0, p2);
+        PSR_SWAP(const psr_attribute_array_t*, attributes0, attributes2);
+    }
+    if (p1.y > p2.y) {
+        PSR_SWAP(psr_float3_t, p1, p2);
+        PSR_SWAP(const psr_attribute_array_t*, attributes1, attributes2);
+    }
+
+    // Create new attribute arrays with position at index 0.
+
+    psr_attribute_array_t a0;
+    psr_attribute_array_t a1;
+    psr_attribute_array_t a2;
+
+    a0.attributes[0] = PSR_ATTRIB_3(p0);
+    a1.attributes[0] = PSR_ATTRIB_3(p1);
+    a2.attributes[0] = PSR_ATTRIB_3(p2);
+
+    assert(attribute_count <= PSR_MAX_ATTRIBUTES - 1);
+    for (int i = 0; i < attribute_count; i++) {
+        a0.attributes[i + 1] = attributes0->attributes[i];
+        a1.attributes[i + 1] = attributes1->attributes[i];
+        a2.attributes[i + 1] = attributes2->attributes[i];
+    }
+
+    attribute_count += 1;
 
     // Check if the top of the triangle is flat.
-    if (v0.y == v1.y) {
-        _psr_line_t* line_a = _psr_line_create(v0, v2);
-        _psr_line_t* line_b = _psr_line_create(v1, v2);
-
-        _psr_raster_triangle_3d_flat_top_or_flat_bottom(color_buffer, depth_buffer, line_a, line_b, pixel_shader, user_data);
-        
-        _psr_line_destroy(line_b);
-        _psr_line_destroy(line_a);
+    if (p0.y == p1.y) {
+        _psr_raster_triangle_3d_flat_top_or_flat_bottom(color_buffer, 
+                                                        depth_buffer, 
+                                                        &a0, &a2,
+                                                        &a1, &a2,
+                                                        attribute_count,
+                                                        pixel_shader,
+                                                        user_data);
     }
     // Check if the bottom is flat.
-    else if (v1.y == v2.y) {
-        _psr_line_t* line_a = _psr_line_create(v0, v1);
-        _psr_line_t* line_b = _psr_line_create(v0, v2);
-
-        _psr_raster_triangle_3d_flat_top_or_flat_bottom(color_buffer, depth_buffer, line_a, line_b, pixel_shader, user_data);
-
-        _psr_line_destroy(line_b);
-        _psr_line_destroy(line_a);
+    else if (p1.y == p2.y) {
+        _psr_raster_triangle_3d_flat_top_or_flat_bottom(color_buffer, 
+                                                        depth_buffer, 
+                                                        &a0, &a1,
+                                                        &a0, &a2,
+                                                        attribute_count,
+                                                        pixel_shader, 
+                                                        user_data);
     }
     // Else split into two smaller triangles.
     else {
-        // 0 = v0._y, 1 = v2._y
-        float alpha = (v1._y - v0._y) / (v2._y - v0._y);
-
-        psr_vertex_t* v3 = _psr_vertex_lerp(&v0, &v2, alpha);
-
-        _psr_line_t* line_0_1 = _psr_line_create(v0, v1);
-        _psr_line_t* line_0_3 = _psr_line_create(v0, *v3);
-        _psr_line_t* line_3_2 = _psr_line_create(*v3, v2);
-        _psr_line_t* line_1_2 = _psr_line_create(v1, v2);
+        psr_attribute_array_t a3;
+        _psr_attributes_interpolate(&a3, &a0, &a2, attribute_count, (p1.y - p0.y) / (p2.y - p0.y));
 
         // Top (flat bottom).
-        _psr_raster_triangle_3d_flat_top_or_flat_bottom(color_buffer, depth_buffer, line_0_1, line_0_3, pixel_shader, user_data);
+        _psr_raster_triangle_3d_flat_top_or_flat_bottom(color_buffer, 
+                                                        depth_buffer, 
+                                                        &a0, &a1,
+                                                        &a0, &a3,
+                                                        attribute_count,
+                                                        pixel_shader, 
+                                                        user_data);
+        
         // Bottom (flat top).
-        _psr_raster_triangle_3d_flat_top_or_flat_bottom(color_buffer, depth_buffer, line_3_2, line_1_2, pixel_shader, user_data);
-
-        _psr_line_destroy(line_1_2);
-        _psr_line_destroy(line_3_2);
-        _psr_line_destroy(line_0_3);
-        _psr_line_destroy(line_0_1);
-
-        _psr_vertex_destroy(v3);
+        _psr_raster_triangle_3d_flat_top_or_flat_bottom(color_buffer, 
+                                                        depth_buffer,  
+                                                        &a3, &a2,
+                                                        &a1, &a2,
+                                                        attribute_count,
+                                                        pixel_shader,
+                                                        user_data);
     }
 }
 

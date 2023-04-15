@@ -20,8 +20,19 @@ void on_key_down(int key_code, void* user_data) {
     }
 }
 
-psr_byte3_t pixel_shader(psr_vertex_attribute_t* attributes, void* user_data) {
-    return *(psr_byte3_t*)user_data;
+psr_byte3_t pixel_shader(psr_int2_t pixel_pos, const psr_attribute_array_t* interpolated, void* user_data) {
+    psr_float3_t normal = PSR_ATTRIB_TO_FLOAT3(interpolated->attributes[0]);
+
+    psr_float3_t light_dir = *(psr_float3_t*)user_data;
+    
+    float light = psr_dot(normal, light_dir);
+    if (light < 0) {
+        light = 0;
+    }
+    
+    psr_byte3_t color = {255 * light, 255 * light, 255 * light};
+    
+    return color;
 }
 
 int main() {
@@ -140,21 +151,28 @@ int main() {
                 tri[j] = positions[mesh->faces[i].position_indices[j]];
             }
 
-            psr_float3_t normal = psr_float3_mul_mat3(mesh->normals[mesh->faces[i].normal_indices[0]], normal_matrix);
-
             psr_float3_t light_dir = {1, 0, 0};
-            float light = psr_dot(normal, light_dir);
-            if (light < 0) {
-                light = 0;
-            }
-            psr_byte3_t color = {255 * light, 255 * light, 255 * light};
             
-            psr_raster_triangle_3d(
-                color_buffer, depth_buffer, 
-                psr_vertex_create(tri[0], NULL, 0), 
-                psr_vertex_create(tri[1], NULL, 0), 
-                psr_vertex_create(tri[2], NULL, 0), 
-                pixel_shader, &color);
+            psr_float3_t n0 = psr_float3_mul_mat3(mesh->normals[mesh->faces[i].normal_indices[0]], normal_matrix);
+            psr_float3_t n1 = psr_float3_mul_mat3(mesh->normals[mesh->faces[i].normal_indices[1]], normal_matrix);
+            psr_float3_t n2 = psr_float3_mul_mat3(mesh->normals[mesh->faces[i].normal_indices[2]], normal_matrix);
+
+            psr_attribute_array_t a0;
+            psr_attribute_array_t a1;
+            psr_attribute_array_t a2;
+            a0.attributes[0] = PSR_ATTRIB_3(n0);
+            a1.attributes[0] = PSR_ATTRIB_3(n1);
+            a2.attributes[0] = PSR_ATTRIB_3(n2);
+
+            psr_raster_triangle_3d(color_buffer, 
+                                   depth_buffer, 
+                                   tri[0], tri[1], tri[2],
+                                   &a0,
+                                   &a1,
+                                   &a2,
+                                   1,
+                                   pixel_shader,
+                                   &light_dir);
         }
 
         free(face_cull_flags);
