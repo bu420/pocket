@@ -157,19 +157,12 @@ int main() {
             psr_float3_t n1 = psr_float3_mul_mat3(mesh->normals[mesh->faces[i].normal_indices[1]], normal_matrix);
             psr_float3_t n2 = psr_float3_mul_mat3(mesh->normals[mesh->faces[i].normal_indices[2]], normal_matrix);
 
-            psr_attribute_array_t a0;
-            psr_attribute_array_t a1;
-            psr_attribute_array_t a2;
-            a0.attributes[0] = PSR_ATTRIB_3(n0);
-            a1.attributes[0] = PSR_ATTRIB_3(n1);
-            a2.attributes[0] = PSR_ATTRIB_3(n2);
-
             psr_raster_triangle_3d(color_buffer, 
                                    depth_buffer, 
                                    tri[0], tri[1], tri[2],
-                                   &a0,
-                                   &a1,
-                                   &a2,
+                                   PSR_ATTRIB_ARRAY(PSR_ATTRIB_3(n0)),
+                                   PSR_ATTRIB_ARRAY(PSR_ATTRIB_3(n1)),
+                                   PSR_ATTRIB_ARRAY(PSR_ATTRIB_3(n2)),
                                    1,
                                    pixel_shader,
                                    &light_dir);

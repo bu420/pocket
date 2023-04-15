@@ -14,10 +14,16 @@
 #define PSR_MUL(out, a, b, nr_elements) PSR_ARITHMETIC(out, a, b, nr_elements, *)
 #define PSR_DIV(out, a, b, nr_elements) PSR_ARITHMETIC(out, a, b, nr_elements, /)
 
-#define PSR_ATTRIB_ARRAY(...) (psr_attribute_array_t){.attributes = (psr_attribute_t[]){__VA_ARGS__}}
+#define PSR_ATTRIB_ARRAY(...) &(psr_attribute_array_t){.attributes = {__VA_ARGS__}}
+#define PSR_ATTRIB_1(a) (psr_attribute_t){.data = {.x = a.x}, .nr_of_floats = 1}
+#define PSR_ATTRIB_2(a) (psr_attribute_t){.data = {.x = a.x, .y = a.y}, .nr_of_floats = 2}
 #define PSR_ATTRIB_3(a) (psr_attribute_t){.data = {.x = a.x, .y = a.y, .z = a.z}, .nr_of_floats = 3}
+#define PSR_ATTRIB_4(a) (psr_attribute_t){.data = {.x = a.x, .y = a.y, .z = a.z, .w = a.w}, .nr_of_floats = 4}
 
+#define PSR_ATTRIB_TO_FLOAT1(a) (a.data.x)
+#define PSR_ATTRIB_TO_FLOAT2(a) (psr_float2_t){a.data.x, a.data.y}
 #define PSR_ATTRIB_TO_FLOAT3(a) (psr_float3_t){a.data.x, a.data.y, a.data.z}
+#define PSR_ATTRIB_TO_FLOAT4(a) (psr_float4_t){a.data.x, a.data.y, a.data.z, a.data.w}
 
 typedef unsigned char psr_byte_t;
 

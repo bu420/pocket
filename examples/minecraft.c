@@ -25,6 +25,10 @@ static char cube_vertex_normals[18] = {
     0, 1, 0
 };
 
+psr_byte3_t pixel_shader(psr_int2_t pixel_pos, const psr_attribute_array_t* interpolated, void* user_data) {
+    return *(psr_byte3_t*)user_data;
+}
+
 int lvl_idx(int x, int y, int z) {
     return z * 256 + y * 16 + x;
 }
@@ -96,7 +100,15 @@ int main(int argc, char** argv) {
                         }
                         psr_byte3_t color = {255 * light, 255 * light, 255 * light};
 
-                        psr_raster_triangle_3d(color_buffer, depth_buffer, tri[0], tri[1], tri[2], color);
+                        psr_raster_triangle_3d(color_buffer, 
+                                               depth_buffer, 
+                                               tri[0], tri[1], tri[2], 
+                                               NULL,
+                                               NULL,
+                                               NULL,
+                                               0,
+                                               pixel_shader,
+                                               &color);
                     }
                 }
             }

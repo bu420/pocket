@@ -1,13 +1,23 @@
+# Targets that only include psr.h
 PSR_TARGETS = text
+# Targets that include both psr.h and pwa.h
 PSR_AND_PWA_TARGETS = window model minecraft
 
+# Warnings.
 WARN = -Wall -Wextra -Wno-missing-braces -Wno-unused-parameter -Wno-unused-variable
 
+# Debug/release build options.
+ifeq ($(MODE), RELEASE)
+OPTIONS = -DNDEBUG -O3
+else
+OPTIONS = -g
+endif
+
 $(PSR_TARGETS): %: %.c
-	gcc $^ ../src/psr.c $(WARN) -I../inc/ -o $@
+	gcc $^ ../src/psr.c $(WARN) $(OPTIONS) -I../inc/ -o $@
 
 $(PSR_AND_PWA_TARGETS): %: %.c
-	gcc $^ ../src/psr.c ../src/pwa.c $(WARN) -I../inc/ -lgdi32 -o $@
+	gcc $^ ../src/psr.c ../src/pwa.c $(WARN) $(OPTIONS) -I../inc/ -lgdi32 -o $@
 
 all: $(PSR_TARGETS) $(PSR_AND_PWA_TARGETS)
 
