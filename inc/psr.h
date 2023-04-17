@@ -1,7 +1,11 @@
 #ifndef PSR_H
 #define PSR_H
 
-#define PSR_MAX_ATTRIBUTES 8
+#include <stdbool.h>
+
+#ifndef PSR_MAX_ATTRIBUTES
+#define PSR_MAX_ATTRIBUTES 6
+#endif
 
 #define PSR_SWAP(type, a, b) { type _temp = a; a = b; b = _temp; }
 
@@ -164,14 +168,16 @@ typedef struct psr_font_t psr_font_t;
 
 typedef psr_byte3_t (*psr_pixel_shader_callback)(psr_int2_t pixel_pos, const psr_attribute_array_t* attributes, void* user_data);
 
+/************************************************
+ *  MATH
+ ***********************************************/
+
 psr_float3_t psr_normalize(psr_float3_t f);
 psr_float3_t psr_cross(psr_float3_t a, psr_float3_t b);
 float psr_dot(psr_float3_t a, psr_float3_t b);
 float psr_lerp(float a, float b, float amount);
 psr_byte3_t psr_byte3_lerp(psr_byte3_t a, psr_byte3_t b, float amount);
 psr_float3_t psr_float3_lerp(psr_float3_t a, psr_float3_t b, float amount);
-
-// Matrix.
 
 void psr_mat4_init_zero(psr_mat4_t* m);
 void psr_mat4_init_identity(psr_mat4_t* m);
@@ -195,7 +201,9 @@ psr_mat4_t psr_look_at(psr_float3_t pos, psr_float3_t target, psr_float3_t up);
 psr_mat4_t psr_perspective(float aspect, float fov, float near, float far);
 psr_mat4_t psr_ortho();
 
-// Buffer.
+/************************************************
+ *  BUFFER
+ ***********************************************/
 
 psr_color_buffer_t* psr_color_buffer_create(int w, int h);
 void psr_color_buffer_destroy(psr_color_buffer_t* color_buffer);
@@ -209,15 +217,34 @@ void psr_depth_buffer_resize(psr_depth_buffer_t* depth_buffer, int w, int h);
 float* psr_depth_buffer_at(psr_depth_buffer_t* depth_buffer, int x, int y);
 void psr_depth_buffer_clear(psr_depth_buffer_t* depth_buffer);
 
-// Image.
+/************************************************
+ *  IMAGE
+ ***********************************************/
 
 psr_image_t* psr_image_create(psr_color_depth_t color_depth, int w, int h);
 void psr_image_destroy(psr_image_t* image);
 // Retuns the address of the first byte of the pixel.
 psr_byte_t* psr_image_at(psr_image_t* image, int x, int y);
 
-// Raster.
+/************************************************
+ *  RASTER
+ ***********************************************/
 
+/**
+ * @brief Rasters a triangle in 3D space with depth buffering, vertex attribute interpolation and a user specified pixel shader.
+ *
+ * @param color_buffer 
+ * @param depth_buffer 
+ * @param p0 
+ * @param p1 
+ * @param p2 
+ * @param attributes0  
+ * @param attributes1 
+ * @param attributes2 
+ * @param attribute_count Number of attributes. `attributes0`, `attributes1` and `attributes0` must contain the same number of attributes.
+ * @param pixel_shader
+ * @param user_data User data passed to the pixel shader.
+ */
 void psr_raster_triangle_3d(psr_color_buffer_t* color_buffer, 
                             psr_depth_buffer_t* depth_buffer, 
                             psr_float3_t p0, 
@@ -230,21 +257,110 @@ void psr_raster_triangle_3d(psr_color_buffer_t* color_buffer,
                             psr_pixel_shader_callback pixel_shader, 
                             void* user_data);
 
+/**
+ * @brief Rasters an image.
+ * 
+ * @param color_buffer 
+ * @param image 
+ * @param src 
+ * @param dst 
+ */
 void psr_raster_image(psr_color_buffer_t* color_buffer, psr_image_t* image, psr_rect_t src, psr_rect_t dst);
 
+/**
+ * @brief Rasters text with a bitmap font.
+ * 
+ * @param color_buffer 
+ * @param text 
+ * @param pos 
+ * @param font 
+ * @param scale 
+ */
 void psr_raster_text(psr_color_buffer_t* color_buffer, char* text, psr_int2_t pos, psr_font_t* font, int scale);
 
-// Asset I/O.
+/************************************************
+ *  ASSET IO
+ ***********************************************/
 
-psr_image_t* psr_image_load_bmp(char* path, psr_color_depth_t color_depth);
+/**
+ * @brief Loads a bitmap (BMP) from disk.
+ * 
+ * @see psr_image_destroy()
+ * @param path 
+ * @param color_depth 
+ * @return 
+ */
+psr_image_t* psr_image_load_bmp(const char* path, psr_color_depth_t color_depth);
 
-void psr_save_bmp(char* path, psr_color_buffer_t* color_buffer);
+/**
+ * @brief Saves the contents of a color buffer to disk as a bitmap (BMP).
+ * 
+ * @param path 
+ * @param color_buffer 
+ */
+void psr_save_bmp(const char* path, const psr_color_buffer_t* color_buffer);
 
-psr_mesh_t* psr_mesh_load_obj(char* path);
+/**
+ * @brief Loads a model (OBJ) from disk.
+ * 
+ * @see psr_mesh_free()
+ * @param path 
+ * @return 
+ */
+psr_mesh_t* psr_mesh_load_obj(const char* path);
+
+/**
+ * @brief Free memory of a mesh.
+ * 
+ * @see psr_mesh_load_obj()
+ * @param[out] mesh 
+ */
 void psr_mesh_free(psr_mesh_t* mesh);
 
-// Parse AngelCode's bitmap font information.
+/**
+ * @brief Loads a file from disk containing information on how to parse a bitmap font (AngleCode format).
+ * 
+ * @see psr_image_load_bmp()
+ * @param image Bitmap font that has already been loaded/created.
+ * @param info_path Path to information file.
+ * @return 
+ */
 psr_font_t* psr_font_load(psr_image_t* image, char* info_path);
+
+/**
+ * @brief Free memory of font.
+ * 
+ * @see psr_image_load_bmp()
+ * @see psr_font_load()
+ * @param[out] font 
+ */
 void psr_font_destroy(psr_font_t* font);
+
+/************************************************
+ *  GENERAL
+ ***********************************************/
+
+/**
+ * Splits a string by a delimiter.
+ * 
+ * @see psr_str_split_free()
+ * @param[in] str Input string. Null-terminated.
+ * @param[in] delim Delimiter (separator). Null-terminated.
+ * @param[in] count_consecutive_delimiters Flag whether consecutive delimiters should produce empty tokens inbetween each other.
+ * @param[out] out_count Number of tokens returned. It is valid to pass null.
+ * @return Array of tokens.
+ */
+char** psr_str_split(const char* str, 
+                     const char* delim, 
+                     bool count_consecutive_delimiters, 
+                     int* out_count);
+
+/**
+ * Frees memory of value returned by `psr_str_split_free()`.
+ * 
+ * @see psr_str_split_free()
+ * @param tokens Array of tokens.
+ */
+void psr_str_split_free(char** tokens);
 
 #endif
