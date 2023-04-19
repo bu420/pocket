@@ -645,12 +645,12 @@ void psr_raster_triangle_3d(psr_color_buffer_t* color_buffer,
                             int attribute_count,
                             psr_pixel_shader_callback pixel_shader, 
                             void* user_data) {
-    p0.x = roundf(p0.x);
-    p0.y = roundf(p0.y);
-    p1.x = roundf(p1.x);
-    p1.y = roundf(p1.y);
-    p2.x = roundf(p2.x);
-    p2.y = roundf(p2.y);
+    p0.x = floorf(p0.x);
+    p0.y = floorf(p0.y);
+    p1.x = floorf(p1.x);
+    p1.y = floorf(p1.y);
+    p2.x = floorf(p2.x);
+    p2.y = floorf(p2.y);
 
     // HACK: discard triangle if outside view.
     if (p0.x < 0 || p0.x >= color_buffer->w || p0.y < 0 || p0.y >= color_buffer->h ||
@@ -675,13 +675,9 @@ void psr_raster_triangle_3d(psr_color_buffer_t* color_buffer,
 
     // Create new attribute arrays with position at index 0.
 
-    psr_attribute_array_t a0;
-    psr_attribute_array_t a1;
-    psr_attribute_array_t a2;
-
-    a0.attributes[0] = PSR_ATTRIB_3(p0);
-    a1.attributes[0] = PSR_ATTRIB_3(p1);
-    a2.attributes[0] = PSR_ATTRIB_3(p2);
+    psr_attribute_array_t a0 = {.attributes[0] = PSR_ATTRIB_3(p0)};
+    psr_attribute_array_t a1 = {.attributes[0] = PSR_ATTRIB_3(p1)};
+    psr_attribute_array_t a2 = {.attributes[0] = PSR_ATTRIB_3(p2)};
 
     assert(attribute_count <= PSR_MAX_ATTRIBUTES - 1);
     for (int i = 0; i < attribute_count; i++) {

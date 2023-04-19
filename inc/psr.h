@@ -97,7 +97,7 @@ typedef union {
     float values[4];
 } psr_float4_t;
 
-typedef struct {
+typedef union {
     float m[3][3];
     struct {
         float m00, m10, m20, m01, m11, m21, m02, m12, m22;
