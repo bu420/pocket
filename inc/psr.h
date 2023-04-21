@@ -247,9 +247,9 @@ psr_byte_t* psr_image_at(psr_image_t* image, int x, int y);
  */
 void psr_raster_triangle_3d(psr_color_buffer_t* color_buffer, 
                             psr_depth_buffer_t* depth_buffer, 
-                            psr_float3_t p0, 
-                            psr_float3_t p1, 
-                            psr_float3_t p2, 
+                            psr_float3_t pos0, 
+                            psr_float3_t pos1, 
+                            psr_float3_t pos2, 
                             const psr_attribute_array_t* attributes0,
                             const psr_attribute_array_t* attributes1,
                             const psr_attribute_array_t* attributes2,

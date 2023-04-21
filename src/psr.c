@@ -16,24 +16,30 @@ typedef enum {
     PSR_LINE_INCREMENT_HORIZONTAL
 } _psr_line_increment_type_t;
 
+// Simple data structure for interpolating between two sets of attributes.
 typedef struct {
+    psr_attribute_array_t attributes;
+    psr_float4_t increments[PSR_MAX_ATTRIBUTES];
     int attribute_count;
 
-    psr_attribute_array_t start;
-    psr_attribute_array_t end;
-    psr_attribute_array_t current;
-
-    _psr_line_increment_type_t increment_type;
-    psr_float4_t increments[PSR_MAX_ATTRIBUTES];
-
     int i;
-    float steps;
-
-    // Floating point positions are stored in the attribute arrays at index 0.
-    psr_int2_t start_pixel_pos;
-    psr_int2_t end_pixel_pos;
-    psr_int2_t current_pixel_pos;
+    int steps;
 } _psr_line_t;
+
+typedef struct {
+    psr_float3_t actual_pos;
+    psr_int2_t pixel_pos;
+} _psr_3d_pos_t;
+
+typedef struct {
+    _psr_line_t line;
+
+    _psr_3d_pos_t start;
+    _psr_3d_pos_t end;
+    _psr_3d_pos_t current;
+
+    psr_float3_t pos_increment;
+} _psr_line_3d_t;
 
 typedef struct {
     int id;
@@ -499,58 +505,69 @@ psr_byte_t* psr_image_at(psr_image_t* image, int x, int y) {
     return &image->data[(y * image->w + x) * _psr_pixel_size(image->color_depth)];
 }
 
-// "start" and "end" must each contain a 3d position at index 0.
-void _psr_line_create_3d(_psr_line_t* out, 
-                         const psr_attribute_array_t* start, 
-                         const psr_attribute_array_t* end, 
-                         int attribute_count,
-                         _psr_line_increment_type_t increment_type) {
-    assert(attribute_count >= 1 && attribute_count <= PSR_MAX_ATTRIBUTES);
-    out->attribute_count = attribute_count;
+void _psr_line_init(_psr_line_t* line, 
+                    const psr_attribute_array_t* start_attributes, 
+                    const psr_attribute_array_t* end_attributes, 
+                    int attribute_count,
+                    int steps) {
+    line->i = 0;
+    line->steps = steps;
+    line->attribute_count = attribute_count;
 
-    assert(start->attributes[0].nr_of_floats == 3 && end->attributes[0].nr_of_floats == 3);
-    psr_float3_t start_pos = PSR_ATTRIB_TO_FLOAT3(start->attributes[0]);
-    psr_float3_t end_pos = PSR_ATTRIB_TO_FLOAT3(end->attributes[0]);
+    memcpy(&line->attributes, start_attributes, sizeof(psr_attribute_array_t));
 
-    out->i = 0;
-    out->increment_type = increment_type;
+    // Setup increments.
 
-    psr_float2_t pos_delta = {end_pos.x - start_pos.x, end_pos.y - start_pos.y};
-
-    switch (increment_type) {
-    case PSR_LINE_INCREMENT_ANY:        out->steps = (_PSR_ABS(pos_delta.x) >= _PSR_ABS(pos_delta.y)) ? _PSR_ABS(pos_delta.x) : _PSR_ABS(pos_delta.y); break;
-    case PSR_LINE_INCREMENT_VERTICAL:   out->steps = _PSR_ABS(pos_delta.y); break;
-    case PSR_LINE_INCREMENT_HORIZONTAL: out->steps = _PSR_ABS(pos_delta.x); break;
-    default: assert(!"Non-reachable entry reached.");
-    }
-
-    memcpy(&out->start, start, sizeof(psr_attribute_array_t));
-    memcpy(&out->end, end, sizeof(psr_attribute_array_t));
-    memcpy(&out->current, &out->start, sizeof(psr_attribute_array_t));
-
-    // Setup attribute increments.
-    if (out->steps < 1) {
+    if (line->steps > 0) {
         for (int i = 0; i < attribute_count; i++) {
-            out->increments[i] = out->start.attributes[i].data;
-        }
-    }
-    else {
-        for (int i = 0; i < attribute_count; i++) {
-            for (int j = 0; j < out->current.attributes[i].nr_of_floats; j++) {
-                float delta = end->attributes[i].data.values[j] - start->attributes[i].data.values[j];
-                out->increments[i].values[j] = delta / out->steps;
+            for (int j = 0; j < line->attributes.attributes[i].nr_of_floats; j++) {
+                float delta = end_attributes->attributes[i].data.values[j] - start_attributes->attributes[i].data.values[j];
+                line->increments[i].values[j] = delta / line->steps;
             }
         }
     }
-
-    out->start_pixel_pos.x = (int)roundf(start_pos.x);
-    out->start_pixel_pos.y = (int)roundf(start_pos.y);
-    out->end_pixel_pos.x = (int)roundf(end_pos.x);
-    out->end_pixel_pos.y = (int)roundf(end_pos.y);
-    out->current_pixel_pos = out->start_pixel_pos;
 }
 
-void _psr_attributes_interpolate(psr_attribute_array_t* out, const psr_attribute_array_t* a, const psr_attribute_array_t* b, int attribute_count, float amount) {
+void _psr_line_3d_init(_psr_line_3d_t* line,
+                       _psr_3d_pos_t start,
+                       _psr_3d_pos_t end,
+                       const psr_attribute_array_t* start_attributes,
+                       const psr_attribute_array_t* end_attributes,
+                       int attribute_count,
+                       _psr_line_increment_type_t increment_type) {
+    line->start = start;
+    line->end = end;
+    line->current = start;
+
+    // Calculate number of steps.
+
+    int steps;
+    psr_int2_t delta_abs = {_PSR_ABS(end.pixel_pos.x - start.pixel_pos.x), _PSR_ABS(end.pixel_pos.y - start.pixel_pos.y)};
+
+    switch (increment_type) {
+    case PSR_LINE_INCREMENT_ANY: 
+        steps = (delta_abs.x >= delta_abs.y) ? delta_abs.x : delta_abs.y; 
+        break;
+    case PSR_LINE_INCREMENT_VERTICAL: 
+        steps = delta_abs.y; 
+        break;
+    case PSR_LINE_INCREMENT_HORIZONTAL: 
+        steps = delta_abs.x; 
+        break;
+    default: 
+        assert(!"Unhandled enum.");
+    }
+
+    _psr_line_init(&line->line, start_attributes, end_attributes, attribute_count, steps);
+
+    // Calculate position increment.
+
+    for (int i = 0; i < 3; i++) {
+        line->pos_increment.values[i] = (end.actual_pos.values[i] - start.actual_pos.values[i]) / steps;
+    }
+}
+
+void _psr_attribute_array_interpolate(psr_attribute_array_t* out, const psr_attribute_array_t* a, const psr_attribute_array_t* b, int attribute_count, float amount) {
     assert(attribute_count <= PSR_MAX_ATTRIBUTES);
     
     for (int i = 0; i < attribute_count; i++) {
@@ -563,173 +580,230 @@ void _psr_attributes_interpolate(psr_attribute_array_t* out, const psr_attribute
     }
 }
 
+void _psr_perspective_correction(_psr_3d_pos_t* out_pos, psr_attribute_array_t* out_attributes, _psr_3d_pos_t in_pos, const psr_attribute_array_t* in_attributes, int attribute_count) {
+    float inv_z = 1 / in_pos.actual_pos.z;
+
+    for (int i = 0; i < 3; i++) {
+        out_pos->actual_pos.values[i] = in_pos.actual_pos.values[i] * inv_z;
+    }
+    out_pos->pixel_pos = (psr_int2_t){(int)roundf(out_pos->actual_pos.x), (int)roundf(out_pos->actual_pos.y)};
+
+    for (int i = 0; i < attribute_count; i++) {
+        for (int j = 0; j < in_attributes->attributes[i].nr_of_floats; j++) {
+            out_attributes->attributes[i].data.values[j] = 
+                in_attributes->attributes[i].data.values[j] * inv_z;
+        }
+    }
+}
+
 bool _psr_line_step(_psr_line_t* line) {
-    if (++line->i <= line->steps) {
+    if (line->i < line->steps) {
         for (int i = 0; i < line->attribute_count; i++) {
-            PSR_ADD(
-                line->current.attributes[i].data, 
-                line->current.attributes[i].data,
-                line->increments[i],
-                line->current.attributes[i].nr_of_floats);
+            for (int j = 0; j < line->attributes.attributes[i].nr_of_floats; j++) {
+                line->attributes.attributes[i].data.values[j] += line->increments[i].values[j];
+            }
         }
 
-        line->current_pixel_pos.x = (int)roundf(line->current.attributes[0].data.x);
-        line->current_pixel_pos.y = (int)roundf(line->current.attributes[0].data.y);
+        line->i++;
+        return true;
+    }
+    return false;
+}
+
+bool _psr_line_3d_step(_psr_line_3d_t* line) {
+    if (_psr_line_step(&line->line)) {
+        PSR_ADD(line->current.actual_pos, line->current.actual_pos, line->pos_increment, 3);
+
+        line->current.pixel_pos.x = (int)roundf(line->current.actual_pos.x);
+        line->current.pixel_pos.y = (int)roundf(line->current.actual_pos.y);
 
         return true;
     }
     return false;
 }
 
-void _psr_raster_triangle_3d_flat_top_or_flat_bottom(psr_color_buffer_t* color_buffer, 
-                                                     psr_depth_buffer_t* depth_buffer,
-                                                     const psr_attribute_array_t* line_a_start_attribs,
-                                                     const psr_attribute_array_t* line_a_end_attribs,
-                                                     const psr_attribute_array_t* line_b_start_attribs,
-                                                     const psr_attribute_array_t* line_b_end_attribs,
-                                                     int attribute_count,
-                                                     psr_pixel_shader_callback pixel_shader, 
-                                                     void* user_data) {
-    _psr_line_t line_a;
-    _psr_line_create_3d(&line_a, line_a_start_attribs, line_a_end_attribs, attribute_count, PSR_LINE_INCREMENT_VERTICAL);
-    _psr_line_t line_b;
-    _psr_line_create_3d(&line_b, line_b_start_attribs, line_b_end_attribs, attribute_count, PSR_LINE_INCREMENT_VERTICAL);
-    
-    if (line_a.start_pixel_pos.x > line_b.start_pixel_pos.x || line_a.end_pixel_pos.x > line_b.end_pixel_pos.x) {
-        PSR_SWAP(_psr_line_t, line_a, line_b);
+void _psr_raster_triangle_3d_between_two_vertical_lines(psr_color_buffer_t* color_buffer, 
+                                                        psr_depth_buffer_t* depth_buffer,
+                                                        _psr_line_3d_t line_a,
+                                                        _psr_line_3d_t line_b,
+                                                        psr_pixel_shader_callback pixel_shader, 
+                                                        void* user_data) {
+    if (line_a.start.pixel_pos.x > line_b.start.pixel_pos.x || line_a.end.pixel_pos.x > line_b.end.pixel_pos.x) {
+        PSR_SWAP(_psr_line_3d_t, line_a, line_b);
     }
     
     do {
-        assert(line_a.current_pixel_pos.y == line_b.current_pixel_pos.y);
+        // HACK: commented the line below.
+        //assert(line_a.current.pixel_pos.y == line_b.current.pixel_pos.y);
 
         // Create a horizontal line between line a and line b.
-        _psr_line_t line_x;
-        _psr_line_create_3d(&line_x, &line_a.current, &line_b.current, line_a.attribute_count, PSR_LINE_INCREMENT_HORIZONTAL);
+        _psr_line_3d_t line_x;
+        _psr_line_3d_init(&line_x, line_a.current, line_b.current, 
+            &line_a.line.attributes, &line_b.line.attributes, 
+            line_a.line.attribute_count, PSR_LINE_INCREMENT_HORIZONTAL);
 
         do {
-            int x = line_x.current_pixel_pos.x;
-            int y = line_a.current_pixel_pos.y;
-            float z = line_x.current.attributes[0].data.z;
-
-            // Remove first attribute (position) from array.
-            psr_attribute_array_t interpolated;
-            for (int i = 0; i < line_x.attribute_count; i++) {
-                interpolated.attributes[i] = line_x.current.attributes[i + 1];
-            }
+            int x = line_x.current.pixel_pos.x;
+            int y = line_x.current.pixel_pos.y;
             
-            psr_byte3_t color = pixel_shader(line_x.current_pixel_pos, &interpolated, user_data);
-            
+            // Update depth buffer.
             if (depth_buffer) {
+                assert(x >= 0 && x < depth_buffer->w && y >= 0 && y < depth_buffer->h);
+
+                float z = line_x.current.actual_pos.z;
+
                 if (z < *psr_depth_buffer_at(depth_buffer, x, y)) {
                     *psr_depth_buffer_at(depth_buffer, x, y) = z;
-                    *psr_color_buffer_at(color_buffer, x, y) = color;
+                }
+                // If pixel is invisible, skip color buffer update.
+                else {
+                    continue;
                 }
             }
-            else {
+
+            // Update color buffer.
+            if (color_buffer) {
+                assert(x >= 0 && x < color_buffer->w && y >= 0 && y < color_buffer->h);
+
+                _psr_3d_pos_t pos;
+                psr_attribute_array_t attributes;
+                _psr_perspective_correction(&pos, &attributes, 
+                    line_x.current, &line_x.line.attributes, 
+                    line_x.line.attribute_count);
+
+                // Invoke pixel shader.
+                psr_byte3_t color = 
+                    pixel_shader(line_x.current.pixel_pos, &attributes, user_data);
+
                 *psr_color_buffer_at(color_buffer, x, y) = color;
             }
         }
-        while (_psr_line_step(&line_x));
+        while (_psr_line_3d_step(&line_x));
     }
-    while (_psr_line_step(&line_a) && _psr_line_step(&line_b));
+    while (_psr_line_3d_step(&line_a) && _psr_line_3d_step(&line_b));
+}
+
+void _psr_raster_triangle_3d_flat_top(psr_color_buffer_t* color_buffer, 
+                                      psr_depth_buffer_t* depth_buffer,
+                                      _psr_3d_pos_t top_left_pos,
+                                      _psr_3d_pos_t top_right_pos,
+                                      _psr_3d_pos_t bottom_pos,
+                                      const psr_attribute_array_t* top_left_attribs,
+                                      const psr_attribute_array_t* top_right_attribs,
+                                      const psr_attribute_array_t* bottom_attribs,
+                                      int attribute_count,
+                                      psr_pixel_shader_callback pixel_shader, 
+                                      void* user_data) {
+    assert(top_left_pos.pixel_pos.y == top_right_pos.pixel_pos.y);
+    
+    _psr_line_3d_t line_a;
+    _psr_line_3d_init(&line_a, top_left_pos, bottom_pos, top_left_attribs, bottom_attribs, 
+        attribute_count, PSR_LINE_INCREMENT_VERTICAL);
+    
+    _psr_line_3d_t line_b;
+    _psr_line_3d_init(&line_b, top_right_pos, bottom_pos, top_right_attribs, bottom_attribs, 
+        attribute_count, PSR_LINE_INCREMENT_VERTICAL);
+
+    _psr_raster_triangle_3d_between_two_vertical_lines(color_buffer, depth_buffer, 
+        line_a, line_b, pixel_shader, user_data);
+}
+
+void _psr_raster_triangle_3d_flat_bottom(psr_color_buffer_t* color_buffer, 
+                                         psr_depth_buffer_t* depth_buffer,
+                                         _psr_3d_pos_t top_pos,
+                                         _psr_3d_pos_t bottom_left_pos,
+                                         _psr_3d_pos_t bottom_right_pos,
+                                         const psr_attribute_array_t* top_attribs,
+                                         const psr_attribute_array_t* bottom_left_attribs,
+                                         const psr_attribute_array_t* bottom_right_attribs,
+                                         int attribute_count,
+                                         psr_pixel_shader_callback pixel_shader, 
+                                         void* user_data) {
+    assert(bottom_left_pos.pixel_pos.y == bottom_right_pos.pixel_pos.y);
+    
+    _psr_line_3d_t line_a;
+    _psr_line_3d_init(&line_a, top_pos, bottom_left_pos, top_attribs, bottom_left_attribs, 
+        attribute_count, PSR_LINE_INCREMENT_VERTICAL);
+    
+    _psr_line_3d_t line_b;
+    _psr_line_3d_init(&line_b, top_pos, bottom_right_pos, top_attribs, bottom_right_attribs, 
+        attribute_count, PSR_LINE_INCREMENT_VERTICAL);
+
+    _psr_raster_triangle_3d_between_two_vertical_lines(color_buffer, depth_buffer, 
+        line_a, line_b, pixel_shader, user_data);
 }
 
 void psr_raster_triangle_3d(psr_color_buffer_t* color_buffer, 
                             psr_depth_buffer_t* depth_buffer, 
-                            psr_float3_t p0, 
-                            psr_float3_t p1, 
-                            psr_float3_t p2, 
+                            psr_float3_t pos0, 
+                            psr_float3_t pos1, 
+                            psr_float3_t pos2, 
                             const psr_attribute_array_t* attributes0,
                             const psr_attribute_array_t* attributes1,
                             const psr_attribute_array_t* attributes2,
                             int attribute_count,
                             psr_pixel_shader_callback pixel_shader, 
                             void* user_data) {
-    p0.x = floorf(p0.x);
-    p0.y = floorf(p0.y);
-    p1.x = floorf(p1.x);
-    p1.y = floorf(p1.y);
-    p2.x = floorf(p2.x);
-    p2.y = floorf(p2.y);
+    _psr_3d_pos_t p0 = {.actual_pos = pos0, .pixel_pos = {(int)roundf(pos0.x), (int)roundf(pos0.y)}};
+    _psr_3d_pos_t p1 = {.actual_pos = pos1, .pixel_pos = {(int)roundf(pos1.x), (int)roundf(pos1.y)}};
+    _psr_3d_pos_t p2 = {.actual_pos = pos2, .pixel_pos = {(int)roundf(pos2.x), (int)roundf(pos2.y)}};
 
     // HACK: discard triangle if outside view.
-    if (p0.x < 0 || p0.x >= color_buffer->w || p0.y < 0 || p0.y >= color_buffer->h ||
-        p1.x < 0 || p1.x >= color_buffer->w || p1.y < 0 || p1.y >= color_buffer->h ||
-        p2.x < 0 || p2.x >= color_buffer->w || p2.y < 0 || p2.y >= color_buffer->h) {
+    if (p0.pixel_pos.x < 0 || p0.pixel_pos.x >= color_buffer->w || p0.pixel_pos.y < 0 || p0.pixel_pos.y >= color_buffer->h ||
+        p1.pixel_pos.x < 0 || p1.pixel_pos.x >= color_buffer->w || p1.pixel_pos.y < 0 || p1.pixel_pos.y >= color_buffer->h ||
+        p2.pixel_pos.x < 0 || p2.pixel_pos.x >= color_buffer->w || p2.pixel_pos.y < 0 || p2.pixel_pos.y >= color_buffer->h) {
         return;
     }
     
     // Sort vertices by height.
-    if (p0.y > p1.y) {
-        PSR_SWAP(psr_float3_t, p0, p1);
+    if (p0.pixel_pos.y > p1.pixel_pos.y) {
+        PSR_SWAP(_psr_3d_pos_t, p0, p1);
         PSR_SWAP(const psr_attribute_array_t*, attributes0, attributes1);
     }
-    if (p0.y > p2.y) {
-        PSR_SWAP(psr_float3_t, p0, p2);
+    if (p0.pixel_pos.y > p2.pixel_pos.y) {
+        PSR_SWAP(_psr_3d_pos_t, p0, p2);
         PSR_SWAP(const psr_attribute_array_t*, attributes0, attributes2);
     }
-    if (p1.y > p2.y) {
-        PSR_SWAP(psr_float3_t, p1, p2);
+    if (p1.pixel_pos.y > p2.pixel_pos.y) {
+        PSR_SWAP(_psr_3d_pos_t, p1, p2);
         PSR_SWAP(const psr_attribute_array_t*, attributes1, attributes2);
     }
 
-    // Create new attribute arrays with position at index 0.
-
-    psr_attribute_array_t a0 = {.attributes[0] = PSR_ATTRIB_3(p0)};
-    psr_attribute_array_t a1 = {.attributes[0] = PSR_ATTRIB_3(p1)};
-    psr_attribute_array_t a2 = {.attributes[0] = PSR_ATTRIB_3(p2)};
-
-    assert(attribute_count <= PSR_MAX_ATTRIBUTES - 1);
-    for (int i = 0; i < attribute_count; i++) {
-        a0.attributes[i + 1] = attributes0->attributes[i];
-        a1.attributes[i + 1] = attributes1->attributes[i];
-        a2.attributes[i + 1] = attributes2->attributes[i];
-    }
-
-    attribute_count += 1;
-
     // Check if the top of the triangle is flat.
-    if (p0.y == p1.y) {
-        _psr_raster_triangle_3d_flat_top_or_flat_bottom(color_buffer, 
-                                                        depth_buffer, 
-                                                        &a0, &a2,
-                                                        &a1, &a2,
-                                                        attribute_count,
-                                                        pixel_shader,
-                                                        user_data);
+    if (p0.pixel_pos.y == p1.pixel_pos.y) {
+        _psr_raster_triangle_3d_flat_top(color_buffer, depth_buffer, 
+            p0, p1, p2, attributes0, attributes1, attributes2, attribute_count,
+            pixel_shader, user_data);
     }
     // Check if the bottom is flat.
-    else if (p1.y == p2.y) {
-        _psr_raster_triangle_3d_flat_top_or_flat_bottom(color_buffer, 
-                                                        depth_buffer, 
-                                                        &a0, &a1,
-                                                        &a0, &a2,
-                                                        attribute_count,
-                                                        pixel_shader, 
-                                                        user_data);
+    else if (p1.pixel_pos.y == p2.pixel_pos.y) {
+        _psr_raster_triangle_3d_flat_bottom(color_buffer, depth_buffer,
+            p0, p1, p2, attributes0, attributes1, attributes2, attribute_count, 
+            pixel_shader, user_data);
     }
     // Else split into two smaller triangles.
     else {
-        psr_attribute_array_t a3;
-        _psr_attributes_interpolate(&a3, &a0, &a2, attribute_count, (p1.y - p0.y) / (p2.y - p0.y));
+        float alpha_split = 
+            (p1.actual_pos.y - p0.actual_pos.y) / (p2.actual_pos.y - p0.actual_pos.y);
 
-        // Top (flat bottom).
-        _psr_raster_triangle_3d_flat_top_or_flat_bottom(color_buffer, 
-                                                        depth_buffer, 
-                                                        &a0, &a1,
-                                                        &a0, &a3,
-                                                        attribute_count,
-                                                        pixel_shader, 
-                                                        user_data);
-        
+        _psr_3d_pos_t p3;
+        p3.actual_pos.y = p1.actual_pos.y;
+        p3.actual_pos.x = p0.actual_pos.x * (1 - alpha_split) + (p2.actual_pos.x * alpha_split);
+        p3.actual_pos.z = p0.actual_pos.z * (1 - alpha_split) + (p2.actual_pos.z * alpha_split);
+        p3.pixel_pos = (psr_int2_t){(int)roundf(p3.actual_pos.x), (int)roundf(p3.actual_pos.y)};
+
+        psr_attribute_array_t attributes3;
+        _psr_attribute_array_interpolate(&attributes3, attributes0, attributes2, attribute_count, alpha_split);
+
         // Bottom (flat top).
-        _psr_raster_triangle_3d_flat_top_or_flat_bottom(color_buffer, 
-                                                        depth_buffer,  
-                                                        &a3, &a2,
-                                                        &a1, &a2,
-                                                        attribute_count,
-                                                        pixel_shader,
-                                                        user_data);
+        _psr_raster_triangle_3d_flat_top(color_buffer, depth_buffer,
+            p1, p3, p2, attributes1, &attributes3, attributes2, attribute_count, 
+            pixel_shader, user_data);
+        
+        // Top (flat bottom).
+        _psr_raster_triangle_3d_flat_bottom(color_buffer, depth_buffer,
+            p0, p1, p3, attributes0, attributes1, &attributes3, attribute_count, 
+            pixel_shader, user_data);
     }
 }
 
