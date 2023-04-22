@@ -22,6 +22,12 @@ void on_key_down(int key_code, void* user_data) {
 
 psr_byte3_t pixel_shader(psr_int2_t pixel_pos, const psr_attribute_array_t* interpolated, void* user_data) {
     psr_float3_t normal = PSR_ATTRIB_TO_FLOAT3(interpolated->attributes[0]);
+    return (psr_byte3_t){
+        fmax(fmin(roundf((normal.x + 1) / 2 * 255), 255), 0), 
+        fmax(fmin(roundf((normal.y + 1) / 2 * 255), 255), 0), 
+        fmax(fmin(roundf((normal.z + 1) / 2 * 255), 255), 0)};
+
+    /*psr_byte3_t obj_color = {50, 255, 150};
 
     psr_float3_t light_dir = *(psr_float3_t*)user_data;
     
@@ -30,9 +36,9 @@ psr_byte3_t pixel_shader(psr_int2_t pixel_pos, const psr_attribute_array_t* inte
         light = 0;
     }
     
-    psr_byte3_t color = {255 * light, 255 * light, 255 * light};
+    psr_byte3_t color = {obj_color.r * light, obj_color.g * light, obj_color.b * light};
     
-    return color;
+    return color;*/
 }
 
 int main() {
@@ -61,23 +67,20 @@ int main() {
     psr_mat4_t view = psr_look_at(camera_pos, camera_target, (psr_float3_t){0, -1, 0});
     psr_mat4_t projection = psr_perspective(HEIGHT / (float)WIDTH, 75.f * (M_PI / 180), 0.1f, 1000.f);
 
-    float last_frame = pwa_get_elapsed_time_ms();
+    double last_frame = pwa_get_elapsed_time_ms();
 
     const int gui_delta_interval = 500;
     double gui_delta_last = pwa_get_elapsed_time_ms();
     double gui_delta_value = 0;
+    float gui_render_time = 0;
 
     while (!pwa_window_should_close(window)) {
+        double current_frame = pwa_get_elapsed_time_ms();
+
         pwa_window_poll_events(window);
 
-        double current_frame = pwa_get_elapsed_time_ms();
         float delta = current_frame - last_frame;
         last_frame = current_frame;
-
-        if (current_frame > (gui_delta_last + gui_delta_interval)) {
-            gui_delta_last = current_frame;
-            gui_delta_value = delta;
-        }
 
         if (!pause_flag) {
             spin_animation += delta * M_PI / 1000;
@@ -86,14 +89,15 @@ int main() {
         psr_depth_buffer_clear(depth_buffer);
 
         // Gradient background.
-        for (int y = 0; y < HEIGHT; y++) {
+        /*for (int y = 0; y < HEIGHT; y++) {
             static psr_byte3_t top = {141, 160, 184};
             static psr_byte3_t bottom = {20, 20, 20};
 
             for (int x = 0; x < WIDTH; x++) {
                 *psr_color_buffer_at(color_buffer, x, y) = psr_byte3_lerp(top, bottom, (float)y / HEIGHT);
             }
-        }
+        }*/
+        psr_color_buffer_clear(color_buffer, (psr_byte3_t){255, 255, 255});
 
         psr_mat4_t model;
         psr_mat4_init_identity(&model);
@@ -140,6 +144,8 @@ int main() {
             positions[i].y = (positions[i].y + 1) / 2.f * HEIGHT;
         }
 
+        double render_time_start = pwa_get_elapsed_time_ms();
+
         // Render triangles.
         for (int i = 0; i < mesh->face_count; i++) {
             if (face_cull_flags[i]) {
@@ -168,12 +174,23 @@ int main() {
                                    &light_dir);
         }
 
+        double render_time_end = pwa_get_elapsed_time_ms();
+
         free(face_cull_flags);
         free(positions);
 
+        if (current_frame > (gui_delta_last + gui_delta_interval)) {
+            gui_delta_last = current_frame;
+            gui_delta_value = delta;
+            gui_render_time = render_time_end - render_time_start;
+        }
+
         char buf[24];
-        snprintf(buf, 24, "Frame: %.2fms", gui_delta_value);
+        snprintf(buf, 24, "Frame:  %.2fms", gui_delta_value);
         psr_raster_text(color_buffer, buf, (psr_int2_t){10, 10}, font, 1);
+
+        snprintf(buf, 24, "Raster: %.2fms", gui_render_time);
+        psr_raster_text(color_buffer, buf, (psr_int2_t){10, 24}, font, 1);
 
         pwa_window_swap_buffers(window, color_buffer);
     }

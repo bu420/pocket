@@ -16,14 +16,22 @@ typedef enum {
     PSR_LINE_INCREMENT_HORIZONTAL
 } _psr_line_increment_type_t;
 
-// Simple data structure for interpolating between two sets of attributes.
 typedef struct {
+    psr_int2_t start;
+    psr_int2_t end;
+    psr_int2_t current;
+    
     psr_attribute_array_t attributes;
     psr_float4_t increments[PSR_MAX_ATTRIBUTES];
     int attribute_count;
 
-    int i;
     int steps;
+    _psr_line_increment_type_t increment_type;
+
+    // Data used with the bresenham algorithm.
+    psr_int2_t delta;
+    psr_int2_t dir;
+    int error;
 } _psr_line_t;
 
 typedef struct {
@@ -34,9 +42,9 @@ typedef struct {
 typedef struct {
     _psr_line_t line;
 
-    _psr_3d_pos_t start;
-    _psr_3d_pos_t end;
-    _psr_3d_pos_t current;
+    psr_float3_t actual_start;
+    psr_float3_t actual_end;
+    psr_float3_t actual_current;
 
     psr_float3_t pos_increment;
 } _psr_line_3d_t;
@@ -506,15 +514,30 @@ psr_byte_t* psr_image_at(psr_image_t* image, int x, int y) {
 }
 
 void _psr_line_init(_psr_line_t* line, 
+                    psr_int2_t start,
+                    psr_int2_t end,
                     const psr_attribute_array_t* start_attributes, 
                     const psr_attribute_array_t* end_attributes, 
                     int attribute_count,
-                    int steps) {
-    line->i = 0;
-    line->steps = steps;
+                    _psr_line_increment_type_t increment_type) {
+    line->start = start;
+    line->end = end;
+    line->current = start;
+    
     line->attribute_count = attribute_count;
-
     memcpy(&line->attributes, start_attributes, sizeof(psr_attribute_array_t));
+    line->increment_type = increment_type;
+
+    // Calculate number of steps.
+
+    psr_int2_t delta_abs = {_PSR_ABS(end.x - start.x), _PSR_ABS(end.y - start.y)};
+
+    switch (increment_type) {
+        case PSR_LINE_INCREMENT_ANY:        line->steps = (delta_abs.x >= delta_abs.y) ? delta_abs.x : delta_abs.y; break;
+        case PSR_LINE_INCREMENT_VERTICAL:   line->steps = delta_abs.y; break;
+        case PSR_LINE_INCREMENT_HORIZONTAL: line->steps = delta_abs.x; break;
+        default:                            assert(!"Unhandled enum.");
+    }
 
     // Setup increments.
 
@@ -526,6 +549,12 @@ void _psr_line_init(_psr_line_t* line,
             }
         }
     }
+
+    // Setup bresenham members.
+
+    line->delta = (psr_int2_t){delta_abs.x, -delta_abs.y};
+    line->dir = (psr_int2_t){start.x < end.x ? 1 : -1, start.y < end.y ? 1 : -1};
+    line->error = line->delta.x + line->delta.y;
 }
 
 void _psr_line_3d_init(_psr_line_3d_t* line,
@@ -535,35 +564,16 @@ void _psr_line_3d_init(_psr_line_3d_t* line,
                        const psr_attribute_array_t* end_attributes,
                        int attribute_count,
                        _psr_line_increment_type_t increment_type) {
-    line->start = start;
-    line->end = end;
-    line->current = start;
+    _psr_line_init(&line->line, start.pixel_pos, end.pixel_pos, start_attributes, end_attributes, attribute_count, increment_type);
 
-    // Calculate number of steps.
+    line->actual_start = start.actual_pos;
+    line->actual_end = end.actual_pos;
+    line->actual_current = start.actual_pos;
 
-    int steps;
-    psr_int2_t delta_abs = {_PSR_ABS(end.pixel_pos.x - start.pixel_pos.x), _PSR_ABS(end.pixel_pos.y - start.pixel_pos.y)};
-
-    switch (increment_type) {
-    case PSR_LINE_INCREMENT_ANY: 
-        steps = (delta_abs.x >= delta_abs.y) ? delta_abs.x : delta_abs.y; 
-        break;
-    case PSR_LINE_INCREMENT_VERTICAL: 
-        steps = delta_abs.y; 
-        break;
-    case PSR_LINE_INCREMENT_HORIZONTAL: 
-        steps = delta_abs.x; 
-        break;
-    default: 
-        assert(!"Unhandled enum.");
-    }
-
-    _psr_line_init(&line->line, start_attributes, end_attributes, attribute_count, steps);
-
-    // Calculate position increment.
+    // Setup position increment.
 
     for (int i = 0; i < 3; i++) {
-        line->pos_increment.values[i] = (end.actual_pos.values[i] - start.actual_pos.values[i]) / steps;
+        line->pos_increment.values[i] = (end.actual_pos.values[i] - start.actual_pos.values[i]) / line->line.steps;
     }
 }
 
@@ -597,26 +607,56 @@ void _psr_perspective_correction(_psr_3d_pos_t* out_pos, psr_attribute_array_t* 
 }
 
 bool _psr_line_step(_psr_line_t* line) {
-    if (line->i < line->steps) {
-        for (int i = 0; i < line->attribute_count; i++) {
-            for (int j = 0; j < line->attributes.attributes[i].nr_of_floats; j++) {
-                line->attributes.attributes[i].data.values[j] += line->increments[i].values[j];
-            }
+    psr_int2_t prev = line->current;
+
+    while (true) {
+        if (line->current.x == line->end.x && line->current.y == line->end.y) {
+            return false;
         }
 
-        line->i++;
-        return true;
+        // Bresenham algorithm.
+        int e2 = line->error << 1;
+        if (e2 >= line->delta.y) {
+            line->error += line->delta.y;
+            line->current.x += line->dir.x;
+        }
+        if (e2 <= line->delta.x) {
+            line->error += line->delta.x;
+            line->current.y += line->dir.y;
+        }
+
+        // Step until difference in specified coordinate.
+        // If for example the type of increment is set to vertical,
+        // we must step until there is a difference in Y.
+
+        if (line->increment_type == PSR_LINE_INCREMENT_HORIZONTAL) {
+            if (prev.x != line->current.x) {
+                break;
+            }
+        }
+        else if (line->increment_type == PSR_LINE_INCREMENT_VERTICAL) {
+            if (prev.y != line->current.y) {
+                break;
+            }
+        }
+        else {
+            break;
+        }
     }
-    return false;
+
+    // Increment attributes.
+    for (int i = 0; i < line->attribute_count; i++) {
+        for (int j = 0; j < line->attributes.attributes[i].nr_of_floats; j++) {
+            line->attributes.attributes[i].data.values[j] += line->increments[i].values[j];
+        }
+    }
+
+    return true;
 }
 
 bool _psr_line_3d_step(_psr_line_3d_t* line) {
     if (_psr_line_step(&line->line)) {
-        PSR_ADD(line->current.actual_pos, line->current.actual_pos, line->pos_increment, 3);
-
-        line->current.pixel_pos.x = (int)roundf(line->current.actual_pos.x);
-        line->current.pixel_pos.y = (int)roundf(line->current.actual_pos.y);
-
+        PSR_ADD(line->actual_current, line->actual_current, line->pos_increment, 3);
         return true;
     }
     return false;
@@ -628,29 +668,32 @@ void _psr_raster_triangle_3d_between_two_vertical_lines(psr_color_buffer_t* colo
                                                         _psr_line_3d_t line_b,
                                                         psr_pixel_shader_callback pixel_shader, 
                                                         void* user_data) {
-    if (line_a.start.pixel_pos.x > line_b.start.pixel_pos.x || line_a.end.pixel_pos.x > line_b.end.pixel_pos.x) {
+    if (line_a.line.start.x > line_b.line.start.x || line_a.line.end.x > line_b.line.end.x) {
         PSR_SWAP(_psr_line_3d_t, line_a, line_b);
     }
     
     do {
-        // HACK: commented the line below.
-        //assert(line_a.current.pixel_pos.y == line_b.current.pixel_pos.y);
+        assert(line_a.line.current.y == line_b.line.current.y);
 
         // Create a horizontal line between line a and line b.
         _psr_line_3d_t line_x;
-        _psr_line_3d_init(&line_x, line_a.current, line_b.current, 
-            &line_a.line.attributes, &line_b.line.attributes, 
-            line_a.line.attribute_count, PSR_LINE_INCREMENT_HORIZONTAL);
+        _psr_line_3d_init(&line_x, 
+                          (_psr_3d_pos_t){.pixel_pos = line_a.line.current, .actual_pos = line_a.actual_current}, 
+                          (_psr_3d_pos_t){.pixel_pos = line_b.line.current, .actual_pos = line_b.actual_current}, 
+                          &line_a.line.attributes, 
+                          &line_b.line.attributes, 
+                          line_a.line.attribute_count, 
+                          PSR_LINE_INCREMENT_HORIZONTAL);
 
         do {
-            int x = line_x.current.pixel_pos.x;
-            int y = line_x.current.pixel_pos.y;
+            int x = line_x.line.current.x;
+            int y = line_x.line.current.y;
             
             // Update depth buffer.
             if (depth_buffer) {
                 assert(x >= 0 && x < depth_buffer->w && y >= 0 && y < depth_buffer->h);
 
-                float z = line_x.current.actual_pos.z;
+                float z = line_x.actual_current.z;
 
                 if (z < *psr_depth_buffer_at(depth_buffer, x, y)) {
                     *psr_depth_buffer_at(depth_buffer, x, y) = z;
@@ -667,13 +710,15 @@ void _psr_raster_triangle_3d_between_two_vertical_lines(psr_color_buffer_t* colo
 
                 _psr_3d_pos_t pos;
                 psr_attribute_array_t attributes;
-                _psr_perspective_correction(&pos, &attributes, 
-                    line_x.current, &line_x.line.attributes, 
-                    line_x.line.attribute_count);
+                _psr_perspective_correction(&pos, 
+                                            &attributes,
+                                            (_psr_3d_pos_t){.pixel_pos = line_x.line.current, .actual_pos = line_x.actual_current}, 
+                                            &line_x.line.attributes, 
+                                            line_x.line.attribute_count);
 
                 // Invoke pixel shader.
                 psr_byte3_t color = 
-                    pixel_shader(line_x.current.pixel_pos, &attributes, user_data);
+                    pixel_shader(line_x.line.current, &attributes, user_data);
 
                 *psr_color_buffer_at(color_buffer, x, y) = color;
             }
@@ -744,9 +789,16 @@ void psr_raster_triangle_3d(psr_color_buffer_t* color_buffer,
                             int attribute_count,
                             psr_pixel_shader_callback pixel_shader, 
                             void* user_data) {
-    _psr_3d_pos_t p0 = {.actual_pos = pos0, .pixel_pos = {(int)roundf(pos0.x), (int)roundf(pos0.y)}};
-    _psr_3d_pos_t p1 = {.actual_pos = pos1, .pixel_pos = {(int)roundf(pos1.x), (int)roundf(pos1.y)}};
-    _psr_3d_pos_t p2 = {.actual_pos = pos2, .pixel_pos = {(int)roundf(pos2.x), (int)roundf(pos2.y)}};
+    // Floor X and Y, otherwise there's missing pixel artifacts.
+    for (int i = 0; i < 2; i++) {
+        pos0.values[i] = floorf(pos0.values[i]);
+        pos1.values[i] = floorf(pos1.values[i]);
+        pos2.values[i] = floorf(pos2.values[i]);
+    }
+    
+    _psr_3d_pos_t p0 = {.actual_pos = pos0, .pixel_pos = {(int)pos0.x, (int)pos0.y}};
+    _psr_3d_pos_t p1 = {.actual_pos = pos1, .pixel_pos = {(int)pos1.x, (int)pos1.y}};
+    _psr_3d_pos_t p2 = {.actual_pos = pos2, .pixel_pos = {(int)pos2.x, (int)pos2.y}};
 
     // HACK: discard triangle if outside view.
     if (p0.pixel_pos.x < 0 || p0.pixel_pos.x >= color_buffer->w || p0.pixel_pos.y < 0 || p0.pixel_pos.y >= color_buffer->h ||
@@ -788,8 +840,8 @@ void psr_raster_triangle_3d(psr_color_buffer_t* color_buffer,
 
         _psr_3d_pos_t p3;
         p3.actual_pos.y = p1.actual_pos.y;
-        p3.actual_pos.x = p0.actual_pos.x * (1 - alpha_split) + (p2.actual_pos.x * alpha_split);
-        p3.actual_pos.z = p0.actual_pos.z * (1 - alpha_split) + (p2.actual_pos.z * alpha_split);
+        p3.actual_pos.x = psr_lerp(p0.actual_pos.x, p2.actual_pos.x, alpha_split);
+        p3.actual_pos.z = psr_lerp(p0.actual_pos.z, p2.actual_pos.z, alpha_split);
         p3.pixel_pos = (psr_int2_t){(int)roundf(p3.actual_pos.x), (int)roundf(p3.actual_pos.y)};
 
         psr_attribute_array_t attributes3;
