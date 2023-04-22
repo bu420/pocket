@@ -112,6 +112,11 @@ psr_float3_t psr_float3_lerp(psr_float3_t a, psr_float3_t b, float amount) {
     return result;
 }
 
+float psr_clamp(float f, float min, float max) {
+    float t = f < min ? min : f;
+    return t > max ? max : t;
+}
+
 void psr_mat4_init_zero(psr_mat4_t* m) {
     for (int x = 0; x < 4; x++) {
         for (int y = 0; y < 4; y++) {
@@ -525,8 +530,11 @@ void _psr_line_init(_psr_line_t* line,
     line->current = start;
     
     line->attribute_count = attribute_count;
-    memcpy(&line->attributes, start_attributes, sizeof(psr_attribute_array_t));
     line->increment_type = increment_type;
+
+    if (start_attributes) {
+        memcpy(&line->attributes, start_attributes, sizeof(psr_attribute_array_t));
+    }
 
     // Calculate number of steps.
 
@@ -667,7 +675,7 @@ void _psr_raster_triangle_3d_between_two_vertical_lines(psr_color_buffer_t* colo
                                                         _psr_line_3d_t line_a,
                                                         _psr_line_3d_t line_b,
                                                         psr_pixel_shader_callback pixel_shader, 
-                                                        void* user_data) {
+                                                        void* user_data) {    
     if (line_a.line.start.x > line_b.line.start.x || line_a.line.end.x > line_b.line.end.x) {
         PSR_SWAP(_psr_line_3d_t, line_a, line_b);
     }

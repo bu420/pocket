@@ -22,11 +22,7 @@ void on_key_down(int key_code, void* user_data) {
 
 psr_byte3_t pixel_shader(psr_int2_t pixel_pos, const psr_attribute_array_t* interpolated, void* user_data) {
     psr_float3_t normal = PSR_ATTRIB_TO_FLOAT3(interpolated->attributes[0]);
-    return (psr_byte3_t){
-        fmax(fmin(roundf((normal.x + 1) / 2 * 255), 255), 0), 
-        fmax(fmin(roundf((normal.y + 1) / 2 * 255), 255), 0), 
-        fmax(fmin(roundf((normal.z + 1) / 2 * 255), 255), 0)};
-
+    
     /*psr_byte3_t obj_color = {50, 255, 150};
 
     psr_float3_t light_dir = *(psr_float3_t*)user_data;
@@ -36,9 +32,15 @@ psr_byte3_t pixel_shader(psr_int2_t pixel_pos, const psr_attribute_array_t* inte
         light = 0;
     }
     
-    psr_byte3_t color = {obj_color.r * light, obj_color.g * light, obj_color.b * light};
+    psr_byte3_t color = {obj_color.r * light, obj_color.g * light, obj_color.b * light};*/
     
-    return color;*/
+    psr_byte3_t color = {
+        psr_clamp((normal.x + 1) / 2 * 255, 0, 255), 
+        psr_clamp((normal.y + 1) / 2 * 255, 0, 255), 
+        psr_clamp((normal.z + 1) / 2 * 255, 0, 255)
+    };
+
+    return color;
 }
 
 int main() {

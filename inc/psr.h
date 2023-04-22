@@ -178,6 +178,7 @@ float psr_dot(psr_float3_t a, psr_float3_t b);
 float psr_lerp(float a, float b, float amount);
 psr_byte3_t psr_byte3_lerp(psr_byte3_t a, psr_byte3_t b, float amount);
 psr_float3_t psr_float3_lerp(psr_float3_t a, psr_float3_t b, float amount);
+float psr_clamp(float f, float min, float max);
 
 void psr_mat4_init_zero(psr_mat4_t* m);
 void psr_mat4_init_identity(psr_mat4_t* m);

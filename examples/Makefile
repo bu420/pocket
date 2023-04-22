@@ -1,7 +1,7 @@
 # Targets that only include psr.h
 PSR_TARGETS = text
 # Targets that include both psr.h and pwa.h
-PSR_AND_PWA_TARGETS = window model minecraft
+PSR_AND_PWA_TARGETS = window cube model minecraft
 
 # Warnings.
 WARN = -Wall -Wextra -Wno-missing-braces -Wno-unused-parameter -Wno-unused-variable
