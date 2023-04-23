@@ -22,11 +22,13 @@ const psr_float3_t cube_positions[36] = {
 };
 
 const psr_float2_t cube_tex_coords[36] = {
-    {32/ATLAS_W,15/ATLAS_H}, {32/ATLAS_W,0}, {47/ATLAS_W,0}, {32/ATLAS_W,15/ATLAS_H}, {47/ATLAS_W,0}, {47/ATLAS_W,15/ATLAS_H},
-    {32/ATLAS_W,15/ATLAS_H}, {32/ATLAS_W,0}, {47/ATLAS_W,0}, {32/ATLAS_W,15/ATLAS_H}, {47/ATLAS_W,0}, {47/ATLAS_W,15/ATLAS_H},
-    {32/ATLAS_W,15/ATLAS_H}, {32/ATLAS_W,0}, {47/ATLAS_W,0}, {32/ATLAS_W,15/ATLAS_H}, {47/ATLAS_W,0}, {47/ATLAS_W,15/ATLAS_H},
-    {32/ATLAS_W,15/ATLAS_H}, {32/ATLAS_W,0}, {47/ATLAS_W,0}, {32/ATLAS_W,15/ATLAS_H}, {47/ATLAS_W,0}, {47/ATLAS_W,15/ATLAS_H},
-    {32/ATLAS_W,15/ATLAS_H}, {32/ATLAS_W,0}, {47/ATLAS_W,0}, {32/ATLAS_W,15/ATLAS_H}, {47/ATLAS_W,0}, {47/ATLAS_W,15/ATLAS_H},
+    {48/ATLAS_W,15/ATLAS_H}, {48/ATLAS_W,0}, {63/ATLAS_W,0}, {48/ATLAS_W,15/ATLAS_H}, {63/ATLAS_W,0}, {63/ATLAS_W,15/ATLAS_H},
+    {48/ATLAS_W,15/ATLAS_H}, {48/ATLAS_W,0}, {63/ATLAS_W,0}, {48/ATLAS_W,15/ATLAS_H}, {63/ATLAS_W,0}, {63/ATLAS_W,15/ATLAS_H},
+    {48/ATLAS_W,15/ATLAS_H}, {48/ATLAS_W,0}, {63/ATLAS_W,0}, {48/ATLAS_W,15/ATLAS_H}, {63/ATLAS_W,0}, {63/ATLAS_W,15/ATLAS_H},
+    {48/ATLAS_W,15/ATLAS_H}, {48/ATLAS_W,0}, {63/ATLAS_W,0}, {48/ATLAS_W,15/ATLAS_H}, {63/ATLAS_W,0}, {63/ATLAS_W,15/ATLAS_H},
+    // Grass top.
+    {0,15/ATLAS_H}, {0,0}, {15/ATLAS_W,0}, {0,15/ATLAS_H}, {15/ATLAS_W,0}, {15/ATLAS_W,15/ATLAS_H},
+    // Dirt bottom.
     {32/ATLAS_W,15/ATLAS_H}, {32/ATLAS_W,0}, {47/ATLAS_W,0}, {32/ATLAS_W,15/ATLAS_H}, {47/ATLAS_W,0}, {47/ATLAS_W,15/ATLAS_H}
 };
 
@@ -35,8 +37,8 @@ const psr_float3_t cube_normals[6] = {
     {-1,  0,  0},
     { 0,  0, -1},
     { 1,  0,  0},
-    { 0, -1,  0},
-    { 0,  1,  0}
+    { 0,  1,  0},
+    { 0, -1,  0}
 };
 
 typedef struct {
@@ -50,20 +52,20 @@ psr_byte3_t pixel_shader(psr_int2_t pixel_pos, const psr_attribute_array_t* inte
 
     psr_byte_t* sample_address = psr_image_sample(data.texture_atlas, tex_coord.u, tex_coord.v);
     psr_byte3_t color = {*sample_address, *(sample_address + 1), *(sample_address + 2)};
+
     return color;
 }
 
 int main() {
     pwa_init();
 
-    psr_image_t* texture_atlas = psr_image_load_bmp("assets/minecraft.bmp", PSR_R8G8B8A8);
+    psr_image_t* texture_atlas = psr_image_load_bmp("assets/terrain.bmp", PSR_R8G8B8A8);
     assert(texture_atlas);
-    printf("%d, %d\n", texture_atlas->w, texture_atlas->h);
 
     psr_color_buffer_t* color_buffer = psr_color_buffer_create(WIDTH, HEIGHT);
     psr_depth_buffer_t* depth_buffer = psr_depth_buffer_create(WIDTH, HEIGHT);
 
-    psr_float3_t camera_pos = {-2, -2, -2};
+    psr_float3_t camera_pos = {2, 2, 2};
     psr_mat4_t projection = psr_perspective(HEIGHT / (float)WIDTH, 70 * (M_PI / 180), .1f, 1000.f);
 
     pwa_window_t* window = pwa_window_create("Cube", WIDTH, HEIGHT, NULL);
@@ -73,7 +75,7 @@ int main() {
 
         // Model, view, projection matrix multiplication.
 
-        psr_mat4_t view = psr_look_at(camera_pos, (psr_float3_t){0, 0, 0}, (psr_float3_t){0, 1, 0});
+        psr_mat4_t view = psr_look_at(camera_pos, (psr_float3_t){0, 0, 0}, (psr_float3_t){0, -1, 0});
 
         psr_mat4_t model;
         psr_mat4_init_identity(&model);
