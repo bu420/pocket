@@ -602,22 +602,6 @@ void _psr_attribute_array_interpolate(psr_attribute_array_t* out, const psr_attr
     }
 }
 
-void _psr_perspective_correction(_psr_3d_pos_t* out_pos, psr_attribute_array_t* out_attributes, _psr_3d_pos_t in_pos, const psr_attribute_array_t* in_attributes, int attribute_count) {
-    float inv_z = 1 / in_pos.actual_pos.z;
-
-    for (int i = 0; i < 3; i++) {
-        out_pos->actual_pos.values[i] = in_pos.actual_pos.values[i] * inv_z;
-    }
-    out_pos->pixel_pos = (psr_int2_t){(int)roundf(out_pos->actual_pos.x), (int)roundf(out_pos->actual_pos.y)};
-
-    for (int i = 0; i < attribute_count; i++) {
-        for (int j = 0; j < in_attributes->attributes[i].nr_of_floats; j++) {
-            out_attributes->attributes[i].data.values[j] = 
-                in_attributes->attributes[i].data.values[j] * inv_z;
-        }
-    }
-}
-
 bool _psr_line_step(_psr_line_t* line) {
     psr_int2_t prev = line->current;
 
@@ -720,17 +704,9 @@ void _psr_raster_triangle_3d_between_two_vertical_lines(psr_color_buffer_t* colo
             if (color_buffer) {
                 assert(x >= 0 && x < color_buffer->w && y >= 0 && y < color_buffer->h);
 
-                _psr_3d_pos_t pos;
-                psr_attribute_array_t attributes;
-                _psr_perspective_correction(&pos, 
-                                            &attributes,
-                                            (_psr_3d_pos_t){.pixel_pos = line_x.line.current, .actual_pos = line_x.actual_current}, 
-                                            &line_x.line.attributes, 
-                                            line_x.line.attribute_count);
-
                 // Invoke pixel shader.
                 psr_byte3_t color = 
-                    pixel_shader(line_x.line.current, &attributes, user_data);
+                    pixel_shader(line_x.line.current, &line_x.line.attributes, user_data);
 
                 *psr_color_buffer_at(color_buffer, x, y) = color;
             }
@@ -808,9 +784,9 @@ void psr_raster_triangle_3d(psr_color_buffer_t* color_buffer,
         pos2.values[i] = floorf(pos2.values[i]);
     }
     
-    _psr_3d_pos_t p0 = {.actual_pos = pos0, .pixel_pos = {(int)pos0.x, (int)pos0.y}};
-    _psr_3d_pos_t p1 = {.actual_pos = pos1, .pixel_pos = {(int)pos1.x, (int)pos1.y}};
-    _psr_3d_pos_t p2 = {.actual_pos = pos2, .pixel_pos = {(int)pos2.x, (int)pos2.y}};
+    _psr_3d_pos_t p0 = {.actual_pos = pos0, .pixel_pos = {pos0.x, pos0.y}};
+    _psr_3d_pos_t p1 = {.actual_pos = pos1, .pixel_pos = {pos1.x, pos1.y}};
+    _psr_3d_pos_t p2 = {.actual_pos = pos2, .pixel_pos = {pos2.x, pos2.y}};
 
     // HACK: discard triangle if outside view.
     if (p0.pixel_pos.x < 0 || p0.pixel_pos.x >= color_buffer->w || p0.pixel_pos.y < 0 || p0.pixel_pos.y >= color_buffer->h ||

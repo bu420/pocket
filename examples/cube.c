@@ -1,9 +1,10 @@
 #include <psr.h>
 #include <pwa.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include <assert.h>
 #define _USE_MATH_DEFINES
 #include <math.h>
-#include <assert.h>
 
 #define WIDTH 640
 #define HEIGHT 640
@@ -17,16 +18,16 @@ const psr_float3_t cube_positions[36] = {
     {0.5f,-0.5f,0.5f},   {0.5f,0.5f,0.5f},   {-0.5f,0.5f,0.5f},   {0.5f,-0.5f,0.5f},   {-0.5f,0.5f,0.5f},   {-0.5f,-0.5f,0.5f},
     {-0.5f,-0.5f,0.5f},  {-0.5f,0.5f,0.5f},  {-0.5f,0.5f,-0.5f},  {-0.5f,-0.5f,0.5f},  {-0.5f,0.5f,-0.5f},  {-0.5f,-0.5f,-0.5f},
     {-0.5f,0.5f,-0.5f},  {-0.5f,0.5f,0.5f},  {0.5f,0.5f,0.5f},    {-0.5f,0.5f,-0.5f},  {0.5f,0.5f,0.5f},    {0.5f,0.5f,-0.5f},
-    {0.5f,-0.5f,0.5f},   {-0.5f,-0.5f,0.5f}, {-0.5f,-0.5f,-0.5f}, {0.5f,-0.5f,0.5f},   {-0.5f,-0.5f,-0.5f}, {0.5f,-0.5f,0}
+    {0.5f,-0.5f,0.5f},   {-0.5f,-0.5f,0.5f}, {-0.5f,-0.5f,-0.5f}, {0.5f,-0.5f,0.5f},   {-0.5f,-0.5f,-0.5f}, {0.5f,-0.5f,-0.5f}
 };
 
 const psr_float2_t cube_tex_coords[36] = {
-    {32/ATLAS_W, 15/ATLAS_H}, {32/ATLAS_W, 0}, {47/ATLAS_W, 0}, {32/ATLAS_W, 15/ATLAS_H}, {47/ATLAS_W, 0}, {47/ATLAS_W, 15/ATLAS_H},
-    {32/ATLAS_W, 15/ATLAS_H}, {32/ATLAS_W, 0}, {47/ATLAS_W, 0}, {32/ATLAS_W, 15/ATLAS_H}, {47/ATLAS_W, 0}, {47/ATLAS_W, 15/ATLAS_H},
-    {32/ATLAS_W, 15/ATLAS_H}, {32/ATLAS_W, 0}, {47/ATLAS_W, 0}, {32/ATLAS_W, 15/ATLAS_H}, {47/ATLAS_W, 0}, {47/ATLAS_W, 15/ATLAS_H},
-    {32/ATLAS_W, 15/ATLAS_H}, {32/ATLAS_W, 0}, {47/ATLAS_W, 0}, {32/ATLAS_W, 15/ATLAS_H}, {47/ATLAS_W, 0}, {47/ATLAS_W, 15/ATLAS_H},
-    {32/ATLAS_W, 15/ATLAS_H}, {32/ATLAS_W, 0}, {47/ATLAS_W, 0}, {32/ATLAS_W, 15/ATLAS_H}, {47/ATLAS_W, 0}, {47/ATLAS_W, 15/ATLAS_H},
-    {32/ATLAS_W, 15/ATLAS_H}, {32/ATLAS_W, 0}, {47/ATLAS_W, 0}, {32/ATLAS_W, 15/ATLAS_H}, {47/ATLAS_W, 0}, {47/ATLAS_W, 15/ATLAS_H}
+    {32/ATLAS_W,15/ATLAS_H}, {32/ATLAS_W,0}, {47/ATLAS_W,0}, {32/ATLAS_W,15/ATLAS_H}, {47/ATLAS_W,0}, {47/ATLAS_W,15/ATLAS_H},
+    {32/ATLAS_W,15/ATLAS_H}, {32/ATLAS_W,0}, {47/ATLAS_W,0}, {32/ATLAS_W,15/ATLAS_H}, {47/ATLAS_W,0}, {47/ATLAS_W,15/ATLAS_H},
+    {32/ATLAS_W,15/ATLAS_H}, {32/ATLAS_W,0}, {47/ATLAS_W,0}, {32/ATLAS_W,15/ATLAS_H}, {47/ATLAS_W,0}, {47/ATLAS_W,15/ATLAS_H},
+    {32/ATLAS_W,15/ATLAS_H}, {32/ATLAS_W,0}, {47/ATLAS_W,0}, {32/ATLAS_W,15/ATLAS_H}, {47/ATLAS_W,0}, {47/ATLAS_W,15/ATLAS_H},
+    {32/ATLAS_W,15/ATLAS_H}, {32/ATLAS_W,0}, {47/ATLAS_W,0}, {32/ATLAS_W,15/ATLAS_H}, {47/ATLAS_W,0}, {47/ATLAS_W,15/ATLAS_H},
+    {32/ATLAS_W,15/ATLAS_H}, {32/ATLAS_W,0}, {47/ATLAS_W,0}, {32/ATLAS_W,15/ATLAS_H}, {47/ATLAS_W,0}, {47/ATLAS_W,15/ATLAS_H}
 };
 
 const psr_float3_t cube_normals[6] = {
@@ -38,19 +39,26 @@ const psr_float3_t cube_normals[6] = {
     { 0,  1,  0}
 };
 
+typedef struct {
+    psr_image_t* texture_atlas;
+    psr_float3_t normal;
+} shader_data_t;
+
 psr_byte3_t pixel_shader(psr_int2_t pixel_pos, const psr_attribute_array_t* interpolated, void* user_data) {
-    psr_image_t* texture_atlas = user_data;
+    shader_data_t data = *(shader_data_t*)user_data;
     psr_float2_t tex_coord = PSR_ATTRIB_TO_FLOAT2(interpolated->attributes[0]);
-    psr_byte_t* sample_address = psr_image_sample(texture_atlas, tex_coord.u, tex_coord.v);
+
+    psr_byte_t* sample_address = psr_image_sample(data.texture_atlas, tex_coord.u, tex_coord.v);
     psr_byte3_t color = {*sample_address, *(sample_address + 1), *(sample_address + 2)};
     return color;
 }
 
-int main(int argc, char** argv) {
+int main() {
     pwa_init();
 
     psr_image_t* texture_atlas = psr_image_load_bmp("assets/minecraft.bmp", PSR_R8G8B8A8);
     assert(texture_atlas);
+    printf("%d, %d\n", texture_atlas->w, texture_atlas->h);
 
     psr_color_buffer_t* color_buffer = psr_color_buffer_create(WIDTH, HEIGHT);
     psr_depth_buffer_t* depth_buffer = psr_depth_buffer_create(WIDTH, HEIGHT);
@@ -95,7 +103,11 @@ int main(int argc, char** argv) {
                 positions[j].y = (positions[j].y + 1) / 2.f * color_buffer->h;
             }
 
-            //psr_float3_t normal = cube_normals[i / 2];
+            psr_float3_t normal = cube_normals[i / 2];
+
+            shader_data_t data;
+            data.texture_atlas = texture_atlas;
+            data.normal = normal;
 
             psr_raster_triangle_3d(color_buffer, 
                                    depth_buffer, 
@@ -107,7 +119,7 @@ int main(int argc, char** argv) {
                                    PSR_ATTRIB_ARRAY(PSR_ATTRIB_2(tex_coords[2])),
                                    1,
                                    pixel_shader,
-                                   texture_atlas);
+                                   &data);
 
             pwa_window_swap_buffers(window, color_buffer);
         }
