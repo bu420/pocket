@@ -3,14 +3,14 @@ PSR_TARGETS = text
 # Targets that include both psr.h and pwa.h
 PSR_AND_PWA_TARGETS = window cube model minecraft
 
-# Warnings.
 WARN = -Wall -Wextra -Wno-missing-braces -Wno-unused-parameter -Wno-unused-variable
+OPTIONS = 
 
 # Debug/release build options.
 ifeq ($(MODE), RELEASE)
-OPTIONS = -DNDEBUG -O3
+OPTIONS += -DNDEBUG -O3
 else
-OPTIONS = -g
+OPTIONS += -g
 endif
 
 $(PSR_TARGETS): %: %.c

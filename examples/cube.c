@@ -3,49 +3,59 @@
 #include <stdlib.h>
 #define _USE_MATH_DEFINES
 #include <math.h>
+#include <assert.h>
 
 #define WIDTH 640
 #define HEIGHT 640
 
-const char cube_vertex_positions[108] = {
-    0,0,0,0,1,0,1,1,0,0,0,0,1,1,0,1,0,0,
-    1,0,0,1,1,0,1,1,1,1,0,0,1,1,1,1,0,1,
-    1,0,1,1,1,1,0,1,1,1,0,1,0,1,1,0,0,1,
-    0,0,1,0,1,1,0,1,0,0,0,1,0,1,0,0,0,0,
-    0,1,0,0,1,1,1,1,1,0,1,0,1,1,1,1,1,0,
-    1,0,1,0,0,1,0,0,0,1,0,1,0,0,0,1,0,0
+#define ATLAS_W 256.f
+#define ATLAS_H 256.f
+
+const psr_float3_t cube_positions[36] = {
+    {-0.5f,-0.5f,-0.5f}, {-0.5f,0.5f,-0.5f}, {0.5f,0.5f,-0.5f},   {-0.5f,-0.5f,-0.5f}, {0.5f,0.5f,-0.5f},   {0.5f,-0.5f,-0.5f},
+    {0.5f,-0.5f,-0.5f},  {0.5f,0.5f,-0.5f},  {0.5f,0.5f,0.5f},    {0.5f,-0.5f,-0.5f},  {0.5f,0.5f,0.5f},    {0.5f,-0.5f,0.5f},
+    {0.5f,-0.5f,0.5f},   {0.5f,0.5f,0.5f},   {-0.5f,0.5f,0.5f},   {0.5f,-0.5f,0.5f},   {-0.5f,0.5f,0.5f},   {-0.5f,-0.5f,0.5f},
+    {-0.5f,-0.5f,0.5f},  {-0.5f,0.5f,0.5f},  {-0.5f,0.5f,-0.5f},  {-0.5f,-0.5f,0.5f},  {-0.5f,0.5f,-0.5f},  {-0.5f,-0.5f,-0.5f},
+    {-0.5f,0.5f,-0.5f},  {-0.5f,0.5f,0.5f},  {0.5f,0.5f,0.5f},    {-0.5f,0.5f,-0.5f},  {0.5f,0.5f,0.5f},    {0.5f,0.5f,-0.5f},
+    {0.5f,-0.5f,0.5f},   {-0.5f,-0.5f,0.5f}, {-0.5f,-0.5f,-0.5f}, {0.5f,-0.5f,0.5f},   {-0.5f,-0.5f,-0.5f}, {0.5f,-0.5f,0}
 };
 
-const char cube_vertex_normals[18] = {
-    0, 0, 1,
-    -1, 0, 0,
-    0, 0, -1,
-    1, 0, 0,
-    0, -1, 0,
-    0, 1, 0
+const psr_float2_t cube_tex_coords[36] = {
+    {32/ATLAS_W, 15/ATLAS_H}, {32/ATLAS_W, 0}, {47/ATLAS_W, 0}, {32/ATLAS_W, 15/ATLAS_H}, {47/ATLAS_W, 0}, {47/ATLAS_W, 15/ATLAS_H},
+    {32/ATLAS_W, 15/ATLAS_H}, {32/ATLAS_W, 0}, {47/ATLAS_W, 0}, {32/ATLAS_W, 15/ATLAS_H}, {47/ATLAS_W, 0}, {47/ATLAS_W, 15/ATLAS_H},
+    {32/ATLAS_W, 15/ATLAS_H}, {32/ATLAS_W, 0}, {47/ATLAS_W, 0}, {32/ATLAS_W, 15/ATLAS_H}, {47/ATLAS_W, 0}, {47/ATLAS_W, 15/ATLAS_H},
+    {32/ATLAS_W, 15/ATLAS_H}, {32/ATLAS_W, 0}, {47/ATLAS_W, 0}, {32/ATLAS_W, 15/ATLAS_H}, {47/ATLAS_W, 0}, {47/ATLAS_W, 15/ATLAS_H},
+    {32/ATLAS_W, 15/ATLAS_H}, {32/ATLAS_W, 0}, {47/ATLAS_W, 0}, {32/ATLAS_W, 15/ATLAS_H}, {47/ATLAS_W, 0}, {47/ATLAS_W, 15/ATLAS_H},
+    {32/ATLAS_W, 15/ATLAS_H}, {32/ATLAS_W, 0}, {47/ATLAS_W, 0}, {32/ATLAS_W, 15/ATLAS_H}, {47/ATLAS_W, 0}, {47/ATLAS_W, 15/ATLAS_H}
 };
 
-typedef struct {
-    psr_float3_t normal;
-} shader_data_t;
+const psr_float3_t cube_normals[6] = {
+    { 0,  0,  1},
+    {-1,  0,  0},
+    { 0,  0, -1},
+    { 1,  0,  0},
+    { 0, -1,  0},
+    { 0,  1,  0}
+};
 
 psr_byte3_t pixel_shader(psr_int2_t pixel_pos, const psr_attribute_array_t* interpolated, void* user_data) {
-    shader_data_t data = *(shader_data_t*)user_data;
-    
-    return (psr_byte3_t){
-        (data.normal.x + 1) / 2 * 255, 
-        (data.normal.y + 1) / 2 * 255, 
-        (data.normal.z + 1) / 2 * 255
-    };
+    psr_image_t* texture_atlas = user_data;
+    psr_float2_t tex_coord = PSR_ATTRIB_TO_FLOAT2(interpolated->attributes[0]);
+    psr_byte_t* sample_address = psr_image_sample(texture_atlas, tex_coord.u, tex_coord.v);
+    psr_byte3_t color = {*sample_address, *(sample_address + 1), *(sample_address + 2)};
+    return color;
 }
 
 int main(int argc, char** argv) {
     pwa_init();
 
+    psr_image_t* texture_atlas = psr_image_load_bmp("assets/minecraft.bmp", PSR_R8G8B8A8);
+    assert(texture_atlas);
+
     psr_color_buffer_t* color_buffer = psr_color_buffer_create(WIDTH, HEIGHT);
     psr_depth_buffer_t* depth_buffer = psr_depth_buffer_create(WIDTH, HEIGHT);
 
-    psr_float3_t camera_pos = {-1, -1, -1};
+    psr_float3_t camera_pos = {-2, -2, -2};
     psr_mat4_t projection = psr_perspective(HEIGHT / (float)WIDTH, 70 * (M_PI / 180), .1f, 1000.f);
 
     pwa_window_t* window = pwa_window_create("Cube", WIDTH, HEIGHT, NULL);
@@ -59,6 +69,8 @@ int main(int argc, char** argv) {
 
         psr_mat4_t model;
         psr_mat4_init_identity(&model);
+        model = psr_mat4_rotate_y(model, pwa_get_elapsed_time_ms() * M_PI / 2000);
+        model = psr_mat4_rotate_z(model, pwa_get_elapsed_time_ms() * M_PI / 4000);
 
         psr_mat4_t mvp = psr_mat4_mul(psr_mat4_mul(model, view), projection);
 
@@ -69,40 +81,33 @@ int main(int argc, char** argv) {
 
         // Raster cube (12 triangles).
         for (int i = 0; i < 12; i++) {
-            // Multiply cube vertex position with MVP matrix and scale to viewport.
-            psr_float3_t tri[3];
-            for (int j = 0; j < 3; j++) {
-                for (int k = 0; k < 3; k++) {
-                    tri[j].values[k] = cube_vertex_positions[i * 9 + j * 3 + k];
-                }
+            psr_float3_t positions[3];
+            psr_float2_t tex_coords[3];
 
-                tri[j] = psr_float3_mul_mat4(tri[j], mvp);
+            for (int j = 0; j < 3; j++) {
+                positions[j] = cube_positions[i * 3 + j];
+                tex_coords[j] = cube_tex_coords[i * 3 + j];
+
+                positions[j] = psr_float3_mul_mat4(positions[j], mvp);
 
                 // Scale from [-1, 1] to viewport size.
-                tri[j].x = (tri[j].x + 1) / 2.f * color_buffer->w;
-                tri[j].y = (tri[j].y + 1) / 2.f * color_buffer->h;
+                positions[j].x = (positions[j].x + 1) / 2.f * color_buffer->w;
+                positions[j].y = (positions[j].y + 1) / 2.f * color_buffer->h;
             }
 
-            psr_float3_t normal;
-            for (int j = 0; j < 3; j++) {
-                normal.values[j] = cube_vertex_normals[(i / 2) * 3 + j];
-            }
+            //psr_float3_t normal = cube_normals[i / 2];
 
-            // Data to pass to pixel shader.
-            shader_data_t data;
-            data.normal = normal;
-
-            // Raster triangle, no attributes, normal vector is passed directly since
-            // it's the same for the whole triangle and doesn't need to be interpolated.
             psr_raster_triangle_3d(color_buffer, 
                                    depth_buffer, 
-                                   tri[0], tri[1], tri[2], 
-                                   NULL,
-                                   NULL,
-                                   NULL,
-                                   0,
+                                   positions[0], 
+                                   positions[1], 
+                                   positions[2], 
+                                   PSR_ATTRIB_ARRAY(PSR_ATTRIB_2(tex_coords[0])),
+                                   PSR_ATTRIB_ARRAY(PSR_ATTRIB_2(tex_coords[1])),
+                                   PSR_ATTRIB_ARRAY(PSR_ATTRIB_2(tex_coords[2])),
+                                   1,
                                    pixel_shader,
-                                   &data);
+                                   texture_atlas);
 
             pwa_window_swap_buffers(window, color_buffer);
         }

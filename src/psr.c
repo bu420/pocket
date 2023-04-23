@@ -518,6 +518,10 @@ psr_byte_t* psr_image_at(psr_image_t* image, int x, int y) {
     return &image->data[(y * image->w + x) * _psr_pixel_size(image->color_depth)];
 }
 
+psr_byte_t* psr_image_sample(psr_image_t* image, float u, float v) {
+    return psr_image_at(image, u * image->w, v * image->h);
+}
+
 void _psr_line_init(_psr_line_t* line, 
                     psr_int2_t start,
                     psr_int2_t end,
