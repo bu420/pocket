@@ -2,23 +2,23 @@
 > :warning: *Work-in-progress!*
 
 ## Description
-A tiny graphics framework.
+Pocket (or Pok) is a tiny graphics framework.
 
-## Modules
-- psr
-  - 2D/3D software rasterizer
-  - Render triangles, lines and bitmap fonts
-- pwa
-  - [Microsoft Windows](https://www.microsoft.com/en-us/windows) abstraction
-  - Manage windows and receive input
-  - Measure time with microsecond precision
+## Features
+- 2D/3D software rasterizer
+- Render triangles, lines and bitmap fonts
+- Pixel shader and vertex attributes
+- Manage windows and receive keyboard input
+- Measure time with microsecond precision
+
+**Note**: Angles are measured in radians.
 
 ## How to use
-Just include the headers and compile the source files. If you use `pwa.c` you must also link against `gdi32`.
+Just include the headers and compile the source files. If you use `pok_platform.c` you must also link against `gdi32`.
 
 For example:
 ```
-gcc my_program.c psr.c pwa.c -lgdi32 -o my_program
+gcc my_program.c pok_core.c pok_math.c pok_util.c pok_gfx.c pok_io.c pok_platform.c -lgdi32 -o my_program
 ```
 
 To compile the examples run:

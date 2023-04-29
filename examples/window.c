@@ -1,46 +1,45 @@
-#include <psr.h>
-#include <pwa.h>
+#include <pok.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
 
-void on_resize(int w, int h, void* user_data) {
-    psr_color_buffer_t* buf = (psr_color_buffer_t*)user_data;
-    psr_color_buffer_resize(buf, w, h);
+void OnResize(int w, int h, void* userData) {
+    Pok_ColorBuffer* buf = (Pok_ColorBuffer*)userData;
+    Pok_ColorBufferResize(buf, w, h);
 }
 
-void on_key_down(int key_code, void* user_data) {
-    printf("Key down: %d\n", key_code);
+void OnKeyDown(int keyCode, void* userData) {
+    printf("Key down: %d\n", keyCode);
 }
 
-void on_key_up(int key_code, void* user_data) {
-    printf("Key up: %d\n", key_code);
+void OnKeyUp(int keyCode, void* userdData) {
+    printf("Key up: %d\n", keyCode);
 }
 
 int main() {
-    pwa_init();
+    Pok_Init();
 
-    psr_color_buffer_t* color_buffer = psr_color_buffer_create(400, 400);
+    Pok_ColorBuffer* colorBuffer = Pok_ColorBufferCreate(400, 400);
 
-    pwa_window_t* window = pwa_window_create("Example Window", 400, 400, color_buffer);
+    Pok_Window* window = Pok_WindowCreate("Example Window", 400, 400, colorBuffer);
 
     if (!window) {
         printf("Window error.\n");
         return -1;
     }
 
-    pwa_window_set_resize_callback(window, on_resize);
-    pwa_window_set_key_down_callback(window, on_key_down);
-    pwa_window_set_key_up_callback(window, on_key_up);
+    Pok_WindowSetResizeCallback(window, OnResize);
+    Pok_WindowSetKeyDownCallback(window, OnKeyDown);
+    Pok_WindowSetKeyUpCallback(window, OnKeyUp);
 
-    while (!pwa_window_should_close(window)) {
-        pwa_window_poll_events(window);
+    while (!Pok_WindowShouldClose(window)) {
+        Pok_WindowPollEvents(window);
 
-        double time = pwa_get_elapsed_time_ms() / 500;
+        double time = Pok_GetElapsedTimeMS() / 500;
 
-        for (int x = 0; x < color_buffer->w; x++) {
-            for (int y = 0; y < color_buffer->h; y++) {
-                psr_byte3_t* pixel = psr_color_buffer_at(color_buffer, x, y);
+        for (int x = 0; x < colorBuffer->w; x++) {
+            for (int y = 0; y < colorBuffer->h; y++) {
+                Pok_Byte3* pixel = Pok_ColorBufferAt(colorBuffer, x, y);
 
                 pixel->r = (sin(time) + 1) / 2 * 255;
                 pixel->g = 255 - pixel->r;
@@ -48,9 +47,9 @@ int main() {
             }
         }
 
-        pwa_window_swap_buffers(window, color_buffer);
+        Pok_WindowSwapBuffers(window, colorBuffer);
     }
 
-    pwa_window_destroy(window);
+    Pok_WindowDestroy(window);
     printf("Done.\n");
 }

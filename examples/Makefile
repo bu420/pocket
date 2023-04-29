@@ -1,25 +1,20 @@
-# Targets that only include psr.h
-PSR_TARGETS = text
-# Targets that include both psr.h and pwa.h
-PSR_AND_PWA_TARGETS = window cube model minecraft
+TARGETS = window text cube model minecraft
 
+SRC = ../src/pok_core.c ../src/pok_math.c ../src/pok_util.c ../src/pok_gfx.c ../src/pok_io.c ../src/pok_platform.c
 WARN = -Wall -Wextra -Wno-missing-braces -Wno-unused-parameter -Wno-unused-variable
-OPTIONS = 
 
 # Debug/release build options.
+# Add MODE=RELEASE to enable optimization.
 ifeq ($(MODE), RELEASE)
-OPTIONS += -DNDEBUG -O3
+OPTIONS = -DNDEBUG -O3
 else
-OPTIONS += -g
+OPTIONS = -g
 endif
 
-$(PSR_TARGETS): %: %.c
-	gcc $^ ../src/psr.c $(WARN) $(OPTIONS) -I../inc/ -o $@
+$(TARGETS): %: %.c
+	gcc $^ $(SRC) $(WARN) $(OPTIONS) -I../inc/ -lgdi32 -o $@
 
-$(PSR_AND_PWA_TARGETS): %: %.c
-	gcc $^ ../src/psr.c ../src/pwa.c $(WARN) $(OPTIONS) -I../inc/ -lgdi32 -o $@
-
-all: $(PSR_TARGETS) $(PSR_AND_PWA_TARGETS)
+all: $(TARGETS)
 
 .PHONY: clean
 clean:
