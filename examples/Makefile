@@ -1,4 +1,4 @@
-TARGETS = window text cube model minecraft
+TARGETS = window text cube model minecraft flightsim
 
 SRC = ../src/pok_core.c ../src/pok_math.c ../src/pok_util.c ../src/pok_gfx.c ../src/pok_io.c ../src/pok_platform.c
 WARN = -Wall -Wextra -Wno-missing-braces -Wno-unused-parameter -Wno-unused-variable

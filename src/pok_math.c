@@ -1,5 +1,13 @@
 #include "pok_math.h"
 
+float Pok_Radians(float degrees) {
+    return degrees * (M_PI / 180.f);
+}
+
+float Pok_Degrees(float radians) {
+    return radians * (180.f / M_PI);
+}
+
 Pok_Float3 Pok_Normalize(Pok_Float3 f) {
     float len = sqrtf(f.x * f.x + f.y * f.y + f.z * f.z);
     Pok_Float3 result = {f.x / len, f.y / len, f.z / len};
