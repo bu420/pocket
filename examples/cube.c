@@ -95,11 +95,25 @@ int main() {
                 positions[j] = cubePositions[i * 3 + j];
                 texCoords[j] = cubeTexCoords[i * 3 + j];
 
-                positions[j] = Pok_Float3MulMat4(positions[j], mvp);
+                // Create a copy of position with a W component.
+                Pok_Float4 p = {positions[j].x, positions[j].y, positions[j].z, 1};
+
+                // Multiply position with MVP matrix, world space -> clip space.
+                p = Pok_Float4MulMat4(p, mvp);
+
+                // Perform clipping...
+
+                // W division, clip space -> NDC space.
+                p.x /= p.w;
+                p.y /= p.w;
+                p.z /= p.w;
 
                 // Scale from [-1, 1] to viewport size.
-                positions[j].x = (positions[j].x + 1) / 2.f * colorBuffer->w;
-                positions[j].y = (positions[j].y + 1) / 2.f * colorBuffer->h;
+                p.x = (p.x + 1) / 2.f * colorBuffer->w;
+                p.y = (p.y + 1) / 2.f * colorBuffer->h;
+
+                // Discard W component because we don't need it anymore.
+                positions[j] = (Pok_Float3){p.x, p.y, p.z};
             }
 
             Pok_Float3 normal = cubeNormals[i / 2];

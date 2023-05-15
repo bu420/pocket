@@ -93,6 +93,16 @@ typedef struct {
     int x, y, w, h;
 } Pok_Rect;
 
+typedef struct {
+    Pok_Float2 point;
+    Pok_Float2 normal;
+} Pok_Plane2D;
+
+typedef struct {
+    Pok_Float3 point;
+    Pok_Float3 normal;
+} Pok_Plane3D;
+
 float Pok_Radians(float degrees);
 float Pok_Degrees(float radians);
 Pok_Float3 Pok_Normalize(Pok_Float3 f);

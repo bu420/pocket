@@ -249,23 +249,22 @@ Pok_Float4 Pok_Mat4MulFloat4(Pok_Mat4 m, Pok_Float4 f) {
 }
 
 Pok_Float3 Pok_Float3MulMat4(Pok_Float3 f, Pok_Mat4 m) {
-    Pok_Float4 f4;
+    Pok_Float4 result;
     for (int y = 0; y < 4; y++) {
         float i = 0;
         for (int x = 0; x < 3; x++) {
             i += m.m[x][y] * f.at[x];
         }
-        f4.at[y] = i + m.m[3][y];
+        result.at[y] = i + m.m[3][y];
     }
     
-    if (f4.w != 0) {
-        f4.x /= f4.w;
-        f4.y /= f4.w;
-        f4.z /= f4.w;
+    if (result.w != 0) {
+        result.x /= result.w;
+        result.y /= result.w;
+        result.z /= result.w;
     }
 
-    Pok_Float3 result = {f4.x, f4.y, f4.z};
-    return result;
+    return (Pok_Float3){result.x, result.y, result.z};
 }
 
 Pok_Float4 Pok_Float4MulMat4(Pok_Float4 f, Pok_Mat4 m) {

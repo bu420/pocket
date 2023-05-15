@@ -1,6 +1,9 @@
 #include "pok_gfx.h"
 
 #include <string.h>
+#ifndef _NDEBUG
+#include <stdio.h>
+#endif
 
 typedef enum {
     POK_LINE_INCREMENT_ANY,
@@ -433,6 +436,8 @@ void Pok_RenderTriangle3D(Pok_ColorBuffer* colorBuffer,
         p2.pixelPos.x < 0 || p2.pixelPos.x >= colorBuffer->w || p2.pixelPos.y < 0 || p2.pixelPos.y >= colorBuffer->h) {
         return;
     }
+
+    // https://www.cs.utexas.edu/users/djimenez/utsa/cs3343/lecture12.html
     
     // Sort vertices by height.
     if (p0.pixelPos.y > p1.pixelPos.y) {

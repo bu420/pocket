@@ -2,7 +2,7 @@
 #include <stdio.h>
 
 #define WIDTH 600
-#define HEIGHT 400
+#define HEIGHT 600
 
 #define ARROW_DOWN 40
 #define ARROW_RIGHT 39
@@ -73,7 +73,7 @@ int main() {
     Camera camera;
     CameraInit(&camera, (Pok_Float3){0, 0, 10}, 0, Pok_Radians(-90));
 
-    Pok_Mat4 projection = Pok_Perspective(HEIGHT / (float)WIDTH, Pok_Radians(70), 0, 1000);
+    Pok_Mat4 projection = Pok_Perspective(HEIGHT / (float)WIDTH, Pok_Radians(70), 0.1f, 1000);
 
     double last = Pok_GetElapsedTimeMS();
 
@@ -87,27 +87,29 @@ int main() {
         double elapsed = Pok_GetElapsedTimeMS();
         
         if (keys[ARROW_UP]) {
-            camera.pitch += delta / 500;
-        }
-        if (keys[ARROW_DOWN]) {
             camera.pitch -= delta / 500;
         }
+        if (keys[ARROW_DOWN]) {
+            camera.pitch += delta / 500;
+        }
         if (keys[ARROW_LEFT]) {
-            camera.yaw += delta / 500;
+            camera.yaw -= delta / 500;
         }
         if (keys[ARROW_RIGHT]) {
-            camera.yaw -= delta / 500;
+            camera.yaw += delta / 500;
         }
 
         CameraUpdate(&camera);
-        //printf("%f %f %f\n", camera.dir.x, camera.dir.y, camera.dir.z);
+
+        Pok_Mat4 model;
+        Pok_Mat4InitIdentity(&model);
 
         Pok_Mat4 view = Pok_LookAt(
             camera.pos, 
             (Pok_Float3){camera.pos.x + camera.dir.x, camera.pos.y + camera.dir.y, camera.pos.z + camera.dir.z}, 
             camera.up);
 
-        Pok_Mat4 mvp = Pok_Mat4Mul(view, projection);
+        Pok_Mat4 mvp = Pok_Mat4Mul(Pok_Mat4Mul(model, view), projection);
 
         Pok_ColorBufferClear(colorBuffer, (Pok_Byte3){255, 255, 255});
         Pok_DepthBufferClear(depthBuffer);
