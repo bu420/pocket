@@ -70,8 +70,6 @@ int main() {
     while (!Pok_WindowShouldClose(window)) {
         Pok_WindowPollEvents(window);
 
-        // Model, view, projection matrix multiplication.
-
         Pok_Mat4 view = Pok_LookAt(cameraPos, (Pok_Float3){0, 0, 0}, (Pok_Float3){0, -1, 0});
 
         Pok_Mat4 model;
@@ -88,32 +86,16 @@ int main() {
 
         // Raster cube (12 triangles).
         for (int i = 0; i < 12; i++) {
-            Pok_Float3 positions[3];
+            Pok_Float4 pos[3];
             Pok_Float2 texCoords[3];
-
+            
             for (int j = 0; j < 3; j++) {
-                positions[j] = cubePositions[i * 3 + j];
+                Pok_Float3 p3 = cubePositions[i * 3 + j];
+                pos[j] = (Pok_Float4){p3.x, p3.y, p3.z, 1};
                 texCoords[j] = cubeTexCoords[i * 3 + j];
 
-                // Create a copy of position with a W component.
-                Pok_Float4 p = {positions[j].x, positions[j].y, positions[j].z, 1};
-
                 // Multiply position with MVP matrix, world space -> clip space.
-                p = Pok_Float4MulMat4(p, mvp);
-
-                // Perform clipping...
-
-                // W division, clip space -> NDC space.
-                p.x /= p.w;
-                p.y /= p.w;
-                p.z /= p.w;
-
-                // Scale from [-1, 1] to viewport size.
-                p.x = (p.x + 1) / 2.f * colorBuffer->w;
-                p.y = (p.y + 1) / 2.f * colorBuffer->h;
-
-                // Discard W component because we don't need it anymore.
-                positions[j] = (Pok_Float3){p.x, p.y, p.z};
+                pos[j] = Pok_Float4MulMat4(pos[j], mvp);
             }
 
             Pok_Float3 normal = cubeNormals[i / 2];
@@ -124,9 +106,9 @@ int main() {
 
             Pok_RenderTriangle3D(colorBuffer, 
                                  depthBuffer, 
-                                 positions[0], 
-                                 positions[1], 
-                                 positions[2], 
+                                 pos[0], 
+                                 pos[1], 
+                                 pos[2], 
                                  POK_ATTRIB_ARRAY(POK_ATTRIB_2(texCoords[0])),
                                  POK_ATTRIB_ARRAY(POK_ATTRIB_2(texCoords[1])),
                                  POK_ATTRIB_ARRAY(POK_ATTRIB_2(texCoords[2])),

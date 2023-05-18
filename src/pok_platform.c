@@ -33,6 +33,9 @@ void Pok_Init() {
     RegisterClass(&wc);
 }
 
+void Pok_Terminate() {
+}
+
 Pok_Window* Pok_WindowCreate(char* title, int w, int h, void* userData) {
     HWND hwnd = CreateWindowEx(0, PWA_WINDOW_CLASS_NAME, title, WS_OVERLAPPEDWINDOW, 
         CW_USEDEFAULT, CW_USEDEFAULT, w, h, NULL, NULL, GetModuleHandle(0), NULL);
@@ -141,9 +144,6 @@ void Pok_DebugPrintLastError() {
     LocalFree(message);
 
     counter++;
-}
-
-void Pok_Terminate() {
 }
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {

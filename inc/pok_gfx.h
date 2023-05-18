@@ -113,9 +113,9 @@ Pok_Byte* Pok_ImageSample(Pok_Image* image, float u, float v);
  */
 void Pok_RenderTriangle3D(Pok_ColorBuffer* colorBuffer, 
                           Pok_DepthBuffer* depthBuffer, 
-                          Pok_Float3 pos0, 
-                          Pok_Float3 pos1, 
-                          Pok_Float3 pos2, 
+                          Pok_Float4 pos0, 
+                          Pok_Float4 pos1, 
+                          Pok_Float4 pos2, 
                           const Pok_AttributeArray* attributes0,
                           const Pok_AttributeArray* attributes1,
                           const Pok_AttributeArray* attributes2,

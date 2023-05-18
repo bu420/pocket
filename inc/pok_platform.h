@@ -15,6 +15,7 @@ typedef void (*Pok_KeyDownCallback)(int keyCode, void* userData);
 typedef void (*Pok_KeyUpCallback)(int keyCode, void* userData);
 
 void Pok_Init();
+void Pok_Terminate();
 
 Pok_Window* Pok_WindowCreate(char* title, int w, int h, void* userData);
 void Pok_WindowDestroy(Pok_Window* window);
@@ -29,7 +30,5 @@ double Pok_GetElapsedTimeMS();
 int64_t Pok_GetTicksPerSecond();
 
 void Pok_DebugPrintLastError();
-
-void Pok_Terminate();
 
 #endif

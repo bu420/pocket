@@ -99,6 +99,7 @@ int main() {
 
         Pok_Mat4 model;
         Pok_Mat4InitIdentity(&model);
+        
         model = Pok_Mat4Translate(model, (Pok_Float3){-.5, -.5, -.5});
         model = Pok_Mat4RotateX(model, 90.f * (M_PI / 180));
         model = Pok_Mat4RotateY(model, spinAnimation);
@@ -108,8 +109,13 @@ int main() {
         Pok_Mat3 normalMatrix = Pok_Mat4ToMat3(Pok_Mat4Transpose(Pok_Mat4Inverse(model)));
 
         // Make a copy of the mesh's positions to preserve the original mesh.
-        Pok_Float3* positions = Pok_AllocHeap(mesh->positionCount * sizeof(Pok_Float3));
-        memcpy(positions, mesh->positions, mesh->positionCount * sizeof(Pok_Float3));
+        Pok_Float4* positions = Pok_AllocHeap(mesh->positionCount * sizeof(Pok_Float4));
+        for (int i = 0; i < mesh->positionCount; i++) {
+            positions[i].x = mesh->positions[i].x;
+            positions[i].y = mesh->positions[i].y;
+            positions[i].z = mesh->positions[i].z;
+            positions[i].w = 1;
+        }
 
         int* faceCullFlags = Pok_AllocHeap(mesh->faceCount * sizeof(int));
 
@@ -117,7 +123,7 @@ int main() {
         for (int i = 0; i < mesh->faceCount; i++) {
             // Pick any one of the triangle's points, put it in model space and check if the triangle should be culled.
             
-            Pok_Float3 anyPointOnTriangle = Pok_Float3MulMat4(positions[mesh->faces[i].positionIndices[0]], model);
+            Pok_Float4 anyPointOnTriangle = Pok_Float4MulMat4(positions[mesh->faces[i].positionIndices[0]], model);
             
             Pok_Float3 dirTowardsPoint;
             for (int j = 0; j < 3; j++) {
@@ -135,13 +141,9 @@ int main() {
             }
         }
 
-        // Model/view/projection transform and viewport scaling.
+        // Local space to homogeneous clip space.
         for (int i = 0; i < mesh->positionCount; i++) {
-            positions[i] = Pok_Float3MulMat4(positions[i], mvp);
-
-            // Scale from [-1, 1] to viewport size.
-            positions[i].x = (positions[i].x + 1) / 2.f * WIDTH;
-            positions[i].y = (positions[i].y + 1) / 2.f * HEIGHT;
+            positions[i] = Pok_Float4MulMat4(positions[i], mvp);
         }
 
         double renderTimeStart = Pok_GetElapsedTimeMS();
@@ -152,7 +154,7 @@ int main() {
                 continue;
             }
 
-            Pok_Float3 tri[3];
+            Pok_Float4 tri[3];
             for (int j = 0; j < 3; j++) {
                 tri[j] = positions[mesh->faces[i].positionIndices[j]];
             }

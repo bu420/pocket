@@ -410,15 +410,46 @@ void Pok_RenderTriangle3DFlatBottom(Pok_ColorBuffer* colorBuffer,
 
 void Pok_RenderTriangle3D(Pok_ColorBuffer* colorBuffer, 
                           Pok_DepthBuffer* depthBuffer, 
-                          Pok_Float3 pos0, 
-                          Pok_Float3 pos1, 
-                          Pok_Float3 pos2, 
+                          Pok_Float4 pos0, 
+                          Pok_Float4 pos1, 
+                          Pok_Float4 pos2, 
                           const Pok_AttributeArray* attributes0,
                           const Pok_AttributeArray* attributes1,
                           const Pok_AttributeArray* attributes2,
                           int attributeCount,
                           Pok_PixelShaderCallback pixelShader, 
                           void* userData) {
+    // Cull against all 6 planes in homogeneous clip space.
+    // If all vertices are outside view, discard triangle.
+    if ((pos0.x > pos0.w && pos1.x > pos1.w && pos2.x > pos2.w) ||
+        (pos0.x < -pos0.w && pos1.x < -pos1.w && pos2.x < -pos2.w) ||
+        
+        (pos0.y > pos0.w && pos1.y > pos1.w && pos2.y > pos2.w) ||
+        (pos0.y < -pos0.w && pos1.y < -pos1.w && pos2.y < -pos2.w) ||
+        
+        (pos0.z > pos0.w && pos1.z > pos1.w && pos2.z > pos2.w) ||
+        (pos0.z < 0 && pos1.z < 0 && pos2.z < 0)) {
+        return;
+    }
+
+    // TODO: Clip.
+    
+    // W division (homogeneous clip space -> NDC space).
+    for (int i = 0; i < 3; i++) {
+        pos0.at[i] /= pos0.w;
+        pos1.at[i] /= pos1.w;
+        pos2.at[i] /= pos2.w;
+    }
+
+    // Viewport transformation. 
+    // Scale from [-1, 1] to color buffer size.
+    pos0.x = (pos0.x + 1) / 2.f * colorBuffer->w;
+    pos0.y = (pos0.y + 1) / 2.f * colorBuffer->h;
+    pos1.x = (pos1.x + 1) / 2.f * colorBuffer->w;
+    pos1.y = (pos1.y + 1) / 2.f * colorBuffer->h;
+    pos2.x = (pos2.x + 1) / 2.f * colorBuffer->w;
+    pos2.y = (pos2.y + 1) / 2.f * colorBuffer->h;
+    
     // Floor X and Y, otherwise there's missing pixel artifacts.
     for (int i = 0; i < 2; i++) {
         pos0.at[i] = floorf(pos0.at[i]);
@@ -426,18 +457,16 @@ void Pok_RenderTriangle3D(Pok_ColorBuffer* colorBuffer,
         pos2.at[i] = floorf(pos2.at[i]);
     }
     
-    Pok_RenderPos p0 = {.actualPos = pos0, .pixelPos = {pos0.x, pos0.y}};
-    Pok_RenderPos p1 = {.actualPos = pos1, .pixelPos = {pos1.x, pos1.y}};
-    Pok_RenderPos p2 = {.actualPos = pos2, .pixelPos = {pos2.x, pos2.y}};
+    Pok_RenderPos p0 = {.actualPos = {pos0.x, pos0.y, pos0.z}, .pixelPos = {pos0.x, pos0.y}};
+    Pok_RenderPos p1 = {.actualPos = {pos1.x, pos1.y, pos1.z}, .pixelPos = {pos1.x, pos1.y}};
+    Pok_RenderPos p2 = {.actualPos = {pos2.x, pos2.y, pos2.z}, .pixelPos = {pos2.x, pos2.y}};
 
     // HACK: discard triangle if outside view.
-    if (p0.pixelPos.x < 0 || p0.pixelPos.x >= colorBuffer->w || p0.pixelPos.y < 0 || p0.pixelPos.y >= colorBuffer->h ||
+    /*if (p0.pixelPos.x < 0 || p0.pixelPos.x >= colorBuffer->w || p0.pixelPos.y < 0 || p0.pixelPos.y >= colorBuffer->h ||
         p1.pixelPos.x < 0 || p1.pixelPos.x >= colorBuffer->w || p1.pixelPos.y < 0 || p1.pixelPos.y >= colorBuffer->h ||
         p2.pixelPos.x < 0 || p2.pixelPos.x >= colorBuffer->w || p2.pixelPos.y < 0 || p2.pixelPos.y >= colorBuffer->h) {
         return;
-    }
-
-    // https://www.cs.utexas.edu/users/djimenez/utsa/cs3343/lecture12.html
+    }*/
     
     // Sort vertices by height.
     if (p0.pixelPos.y > p1.pixelPos.y) {
